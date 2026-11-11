@@ -57,6 +57,7 @@ function Get-DevSetupConfig {
         $install[$tool] = $false
     }
     $install.powershell = -not (Test-Path (Join-Path $env:FIXTURE 'disabled'))
+    $install.python = Test-Path (Join-Path $env:FIXTURE 'python-enabled')
     [pscustomobject]@{
         user=[pscustomobject]@{install=[pscustomobject]$install; checkUpgrades=$false}
         advanced=[pscustomobject]@{powershell=[pscustomobject]@{
@@ -142,6 +143,30 @@ if ($env:TEST_REAL_PORTABLE -eq '1') {
             for path in self.root.rglob("*") if path.is_file()
         }
 
+    def test_uninstall_audit_preserves_python_version_override(self):
+        (self.root / "disabled").touch()
+        (self.root / "python-enabled").touch()
+        (self.scripts / "install-python.ps1").write_text(
+            "param([string]$PythonVersion, [switch]$Uninstall, [switch]$Audit)\n"
+            'Write-DevSetupStatus remove Python "would uninstall Python $PythonVersion"\n'
+        )
+        output = self.run_installer(
+            "-Uninstall", "-Audit", "-PythonVersion", "3.13", setup=True
+        )
+        self.assertIn("would uninstall Python 3.13", output)
+        self.assertIn(r"APPLY: .\setup.ps1 -Uninstall -PythonVersion '3.13'", output)
+
+    def test_upgrade_check_preserves_options_without_applying_upgrade_flags(self):
+        (self.root / "missing").touch()
+        output = self.run_installer(
+            "-CheckUpgradesOnly", "-UpgradePowerShell", "-SkipSettingsSync",
+            "-PythonVersion", "3.13", setup=True,
+        )
+        recommendation = next(line for line in output.splitlines() if "APPLY:" in line)
+        self.assertIn("-PythonVersion '3.13'", recommendation)
+        self.assertIn("-SkipSettingsSync", recommendation)
+        self.assertNotIn("-UpgradePowerShell", recommendation)
+
     def test_reports_installed_and_latest_without_upgrading(self):
         output = self.run_installer("-CheckUpgrades")
         self.assertIn("installed 7.6.9; latest stable 7.6.10", output)
@@ -215,7 +240,7 @@ if ($env:TEST_REAL_PORTABLE -eq '1') {
         output = self.run_installer("-UpgradePowerShell", "-Audit", "-SkipUpgradeCheck",
                                     setup=True)
         self.assertIn("would install stable 7.6.10", output)
-        self.assertIn(r"APPLY: .\setup.ps1 -UpgradePowerShell", output)
+        self.assertIn(r"APPLY: .\setup.ps1 -SkipUpgradeCheck -UpgradePowerShell", output)
         self.assertEqual(self.snapshot(), before)
         output = self.run_installer("-UpgradePowerShell", "-CheckUpgradesOnly", setup=True)
         self.assertIn("installed 7.6.9; latest stable 7.6.10", output)
@@ -308,6 +333,12 @@ devsetup_status() {
 }
 devsetup_activate_homebrew() { [[ ! -f "$HOME/no-brew" ]]; }
 devsetup_enabled() { [[ "$1" == user.install.powershell && ! -f "$HOME/disabled" ]]; }
+if [[ -f "$HOME/no-pwsh" ]]; then
+    command() {
+        if [[ "$*" == "-v pwsh" ]]; then return 1; fi
+        builtin command "$@"
+    }
+fi
 """)
         self.bin = self.root / "bin"
         self.bin.mkdir()
@@ -353,7 +384,7 @@ esac
             "tag_name": f"v{latest}", "draft": False, "prerelease": False, **metadata,
         }))
 
-    def run_installer(self, *options, success=True, setup=False):
+    def run_installer(self, *options, success=True, setup=False, config_override=None):
         env = {
             **os.environ, "TEST_HOME": str(self.root), "NO_COLOR": "1",
             "FIXTURE_SCRIPT": "setup.sh" if setup else "src/scripts/install-powershell.sh",
@@ -361,6 +392,8 @@ esac
             "FIXTURE_PYTHON": sys.executable,
         }
         env.pop("DEVSETUP_STATUS_LOG", None)
+        if config_override is not None:
+            env["DEVSETUP_CONFIG_FILE"] = str(config_override)
         env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
         result = subprocess.run(
             [BASH, "-c", """
@@ -464,6 +497,22 @@ bash "$FIXTURE_SCRIPT" "$@"
         result = self.run_installer("--upgrade-powershell", "--audit", setup=True)
         self.assertIn("user.install.powershell is false", result.stdout)
         self.assertFalse((self.root / "upgrades").exists())
+
+    def test_upgrade_check_preserves_config_and_skips_upgrade_flags(self):
+        (self.root / "no-pwsh").touch()
+        custom = self.root / "custom config.json"
+        result = self.run_installer(
+            "--check-upgrades-only", "--upgrade-powershell", "--skip-settings-sync",
+            setup=True, config_override=custom,
+        )
+        recommendation = next(
+            line for line in result.stdout.splitlines()
+            if line.startswith("Run this to apply them:")
+        )
+        self.assertIn("DEVSETUP_CONFIG_FILE=", recommendation)
+        self.assertIn("custom\\ config.json", recommendation)
+        self.assertIn("--skip-settings-sync", recommendation)
+        self.assertNotIn("--upgrade-powershell", recommendation)
 
     def test_setup_without_upgrade_completes_audit_and_repeat_runs(self):
         for options in (("--audit", "--skip-upgrade-check"),
