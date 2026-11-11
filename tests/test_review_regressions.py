@@ -205,6 +205,17 @@ exec "$REAL_GIT" "$@"
         self.assertEqual(preserved.returncode, 0, preserved.stdout + preserved.stderr)
         self.assertIn("existing credential helper preserved", preserved.stdout)
         self.assertEqual((self.root / "gitconfig").read_bytes(), before)
+        subprocess.run(
+            [self.env["REAL_GIT"], "config", "--global", "credential.helper", ""],
+            env=self.env, check=True, timeout=30,
+        )
+        before = (self.root / "gitconfig").read_bytes()
+        disabled = self.run_script(script)
+        self.assertEqual(disabled.returncode, 0, disabled.stdout + disabled.stderr)
+        self.assertEqual((self.root / "gitconfig").read_bytes(), before)
+        (self.root / "gitconfig").write_text("[credential\n")
+        invalid = self.run_script(script)
+        self.assertNotEqual(invalid.returncode, 0, invalid.stdout + invalid.stderr)
 
     def test_parent_activates_new_homebrew_and_uninstalls_prettier_first(self):
         kit = self.root / "kit"

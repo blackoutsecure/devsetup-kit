@@ -58,17 +58,20 @@ if [[ $check_upgrades -eq 1 && $git_present -eq 1 && "$os" == "Linux" ]]; then
 fi
 
 git_credential_helper_status() {
-	local helper effective exec_path
+	local helper effective exec_path config_status
 	case "$os" in
 		Darwin) helper="$(devsetup_config advanced.git.credential.macos.helper osxkeychain)" ;;
 		*)      helper="$(devsetup_config advanced.git.credential.linux.helper manager)" ;;
 	esac
-	effective="$(git config --get credential.helper 2>/dev/null || true)"
-	if [[ "$effective" == "$helper" ]]; then
-		devsetup_status found "git cfg" "credential helper '$helper' already configured"
-	elif [[ -n "$effective" ]]; then
-		devsetup_status skip "git cfg" "existing credential helper preserved"
+	if effective="$(git config --get credential.helper)"; then
+		if [[ "$effective" == "$helper" ]]; then
+			devsetup_status found "git cfg" "credential helper '$helper' already configured"
+		else
+			devsetup_status skip "git cfg" "existing credential helper preserved"
+		fi
 	else
+		config_status=$?
+		if [[ $config_status -ne 1 ]]; then return "$config_status"; fi
 		exec_path="$(git --exec-path)"
 		if command -v "git-credential-$helper" >/dev/null 2>&1 || [[ -x "$exec_path/git-credential-$helper" ]]; then
 			if [[ $audit -eq 1 ]]; then
