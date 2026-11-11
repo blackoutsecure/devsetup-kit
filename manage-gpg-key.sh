@@ -89,6 +89,15 @@ if ! command -v gpg >/dev/null 2>&1; then
 fi
 
 key_id=""
+batch_file=""
+bundle_dir=""
+work_dir=""
+cleanup_gpg_temporary_files() {
+	[[ -z "$batch_file" ]] || rm -f -- "$batch_file"
+	[[ -z "$bundle_dir" ]] || rm -rf -- "$bundle_dir"
+	[[ -z "$work_dir" ]] || rm -rf -- "$work_dir"
+}
+trap cleanup_gpg_temporary_files EXIT
 
 if [[ $generate -eq 1 ]]; then
 	[[ -z "$key_name" ]] && key_name="$(devsetup_config user.git.userName "")"
@@ -121,10 +130,11 @@ Passphrase: $key_passphrase
 EOF
 
 	devsetup_status install "GPG key" "generating a new RSA 4096 key for $key_name <$key_email> (expires in $expiry)"
-	gpg --batch --pinentry-mode loopback --gen-key "$batch_file" >/dev/null 2>&1
+	gpg_status="$(gpg --batch --status-fd 1 --pinentry-mode loopback --gen-key "$batch_file" 2>/dev/null)"
 	rm -f "$batch_file"
+	batch_file=""
 
-	key_id="$(gpg --list-secret-keys --with-colons "$key_email" | awk -F: '/^fpr:/ { print $10; exit }')"
+	key_id="$(printf '%s\n' "$gpg_status" | awk '$1 == "[GNUPG:]" && $2 == "KEY_CREATED" { print $4; exit }')"
 	if [[ -z "$key_id" ]]; then
 		echo "Key generation reported success but the new key could not be found for $key_email." >&2
 		exit 1
@@ -154,7 +164,6 @@ if [[ -n "$export_path" ]]; then
 	fi
 
 	bundle_dir="$(mktemp -d)"
-	trap 'rm -rf "$bundle_dir"' EXIT
 
 	gpg --batch --yes --export --armor "$key_id" > "$bundle_dir/public.asc"
 	gpg --batch --yes --export-secret-keys --armor "$key_id" > "$bundle_dir/secret.asc"
@@ -170,7 +179,7 @@ EOF
 		echo "Private key passphrase: $key_passphrase" > "$bundle_dir/KEY-PASSPHRASE.txt"
 	fi
 
-	plain_tar="$(mktemp)"
+	plain_tar="$bundle_dir/bundle.tar.gz"
 	bundle_files=(public.asc secret.asc README.txt)
 	[[ -f "$bundle_dir/KEY-PASSPHRASE.txt" ]] && bundle_files+=(KEY-PASSPHRASE.txt)
 	tar -C "$bundle_dir" -czf "$plain_tar" "${bundle_files[@]}"
@@ -195,7 +204,6 @@ if [[ -n "$import_path" ]]; then
 	fi
 
 	work_dir="$(mktemp -d)"
-	trap 'rm -rf "$work_dir"' EXIT
 	plain_tar="$work_dir/bundle.tar.gz"
 
 	if [[ "$import_path" == *.gpg ]]; then

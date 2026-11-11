@@ -228,6 +228,24 @@ Write-Host 'PASS: admin opt-in preserved user scope'
 """)
             self.assertIn("PASS: admin opt-in preserved user scope", output)
 
+    def test_winget_upgrade_check_only_lists_available_updates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+$ErrorActionPreference = 'Stop'
+. 'REAL_MODULE'
+function winget.exe {
+    if (($args -join ' ') -ne 'upgrade --disable-interactivity') {
+        throw "Unexpected mutating WinGet invocation: $args"
+    }
+    $global:LASTEXITCODE = 0
+    'Fixture  Vendor.Fixture  1.0  2.0  winget'
+}
+Test-DevSetupWingetUpgrade -Component fixture -PackageId Vendor.Fixture
+Write-Host 'PASS: read-only upgrade listing'
+""")
+            self.assertIn("newer version available: installed 1.0, latest 2.0", output)
+            self.assertIn("PASS: read-only upgrade listing", output)
+
 
 @unittest.skipUnless(BASH, "Bash is required")
 class BashExecutionModeTests(unittest.TestCase):
@@ -357,6 +375,19 @@ echo 'PASS: formula-only audit, apply, second run'
 """)
             self.assertIn("PASS: formula-only audit, apply, second run", output)
             self.assertEqual((root / "calls").read_text().splitlines(), ["install"])
+
+    def test_homebrew_print_path_keeps_upgrade_status_off_stdout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+. "$REAL_CONFIG"
+printf '#!/usr/bin/env bash\necho fixture-1.0\n' > "$HOME/bin/devsetup-fixture-tool"
+chmod +x "$HOME/bin/devsetup-fixture-tool"
+devsetup_check_homebrew_upgrade() { devsetup_status update fixture "newer version"; }
+result="$(devsetup_install_via_homebrew fixture fixture devsetup-fixture-tool fixture 0 1 1)"
+[[ "$result" == "$HOME/bin/devsetup-fixture-tool" ]]
+echo 'PASS: print-path remains machine-readable'
+""")
+            self.assertIn("PASS: print-path remains machine-readable", output)
 
 
 if __name__ == "__main__":

@@ -140,11 +140,11 @@ if ($Uninstall) {
     if (Get-DevSetupValue $config "user.install.githubCli" $true) {
         & (Join-Path $scripts "install-github-cli.ps1") -Uninstall -Audit:$Audit
     }
-    if (Get-DevSetupValue $config "user.install.node" $true) {
-        & (Join-Path $scripts "install-node.ps1") -Uninstall -Audit:$Audit
-    }
     if (Get-DevSetupValue $config "user.install.prettier" $true) {
         & (Join-Path $scripts "install-prettier.ps1") -Uninstall -Audit:$Audit
+    }
+    if (Get-DevSetupValue $config "user.install.node" $true) {
+        & (Join-Path $scripts "install-node.ps1") -Uninstall -Audit:$Audit
     }
     if (Get-DevSetupValue $config "user.install.python" $true) {
         & (Join-Path $scripts "install-python.ps1") -PythonVersion $PythonVersion -Uninstall -Audit:$Audit

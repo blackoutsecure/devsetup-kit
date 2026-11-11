@@ -56,7 +56,7 @@ if ($CheckUpgrades -and -not $pathGit -and (Test-Path $portableGitExe)) {
     # Only PortableGit is managed by this script; a system git on PATH is left alone.
     try {
         $latestRelease = Invoke-RestMethod -Uri $releaseApiUrl -Headers @{ "User-Agent" = "portable-git-setup" }
-        $latestVersion = ($latestRelease.tag_name -replace '^v', '') -replace '\.windows.*', ''
+        $latestVersion = $latestRelease.tag_name -replace '^v', ''
         $installedVersion = ((& $portableGitExe --version) -replace 'git version ', '').Trim()
         if ($latestVersion -and $installedVersion -and ($installedVersion -ne $latestVersion)) {
             Write-DevSetupStatus update "Git" "newer PortableGit available: $latestVersion (installed $installedVersion)"

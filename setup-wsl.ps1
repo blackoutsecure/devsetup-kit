@@ -39,7 +39,10 @@ function Invoke-Wsl {
 function Invoke-WslRootScript {
     param([string]$Script, [string]$TargetUser)
 
-  $output = $Script | & wsl.exe -d $Distribution -u root -- bash -s -- $TargetUser 2>&1
+  $arguments = @()
+  if ($Distribution) { $arguments += @("-d", $Distribution) }
+  $arguments += @("-u", "root", "--", "bash", "-s", "--", $TargetUser)
+  $output = $Script | & wsl.exe @arguments 2>&1
     if ($LASTEXITCODE -ne 0) {
     throw "WSL configuration failed: $($output -join [Environment]::NewLine)"
     }
@@ -100,14 +103,15 @@ $currentUser = (Invoke-Wsl ($wslArguments + @("--exec", "whoami")) | Select-Obje
 $target = if ($Distribution) { $Distribution } else { "the default distribution" }
 $currentUserState = Get-WslUserState $wslArguments $currentUser
 
-if ($currentUserState.MeetsCriteria) {
+if ($currentUserState.MeetsCriteria -and (-not $UserName -or $UserName -eq $currentUser)) {
   Write-DevSetupStatus found "WSL" "$target starts as $currentUser with a writable home and login shell"
     exit 0
 }
 
 if (-not $Configure -or $Audit) {
   $mode = if ($Audit) { "would configure" } else { "run with -Configure -UserName <name> to configure" }
-  Write-DevSetupStatus warn "WSL" "$target is not ready: $($currentUserState.Problems -join '; '); $mode a non-root default user"
+  $reason = if ($currentUserState.MeetsCriteria) { "requested default user is $UserName, not $currentUser" } else { $currentUserState.Problems -join '; ' }
+  Write-DevSetupStatus warn "WSL" "$target requires attention: $reason; $mode a non-root default user"
     exit 0
 }
 

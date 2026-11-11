@@ -195,6 +195,9 @@ Prettier is installed by default as a user-level npm global so `prettier --check
 works in any repository, including before a repository's own dependencies are installed.
 The VS Code Prettier extension and default formatter setting are also part of the synced
 baseline. Set `user.install.prettier` to `false` to skip the global CLI.
+On macOS/Linux, the installer uses the configured prefix without changing npm's
+global configuration and adds its bin directory to the login profile. Open a new
+login shell to use it.
 
 GPG is available by default too, so `git` commit/tag signing works without a separate
 tool installation. Set `user.install.gpg` to `false` to skip its configuration. On Windows,

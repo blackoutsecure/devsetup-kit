@@ -533,9 +533,13 @@ function Test-DevSetupWingetUpgrade {
     param([Parameter(Mandatory)][string]$Component, [Parameter(Mandatory)][string]$PackageId)
 
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) { return }
-    $output = & winget.exe upgrade --id $PackageId -e --accept-source-agreements 2>$null
-    if ($LASTEXITCODE -eq 0 -and ($output | Select-String -SimpleMatch $PackageId)) {
-        $row = $output | Where-Object { $_ -like "*$PackageId*" } | Select-Object -First 1
+    $output = & winget.exe upgrade --disable-interactivity 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-DevSetupStatus warn $Component "could not query available WinGet upgrades (exit code $LASTEXITCODE)"
+        return
+    }
+    $row = $output | Where-Object { $_ -match ("(^|\s)" + [regex]::Escape($PackageId) + "(\s|$)") } | Select-Object -First 1
+    if ($row) {
         $installedVersion = "unknown"
         $availableVersion = "unknown"
         if ($row) {

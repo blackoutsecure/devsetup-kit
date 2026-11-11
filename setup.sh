@@ -78,8 +78,8 @@ if [[ $uninstall -eq 1 ]]; then
 	if devsetup_enabled user.install.homebrew; then "${BASH:-bash}" "$scripts/install-homebrew.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.git; then "${BASH:-bash}" "$scripts/install-portable-git.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.githubCli; then "${BASH:-bash}" "$scripts/install-github-cli.sh" --uninstall $audit_flag; fi
-	if devsetup_enabled user.install.node; then "${BASH:-bash}" "$scripts/install-node.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.prettier; then "${BASH:-bash}" "$scripts/install-prettier.sh" --uninstall $audit_flag; fi
+	if devsetup_enabled user.install.node; then "${BASH:-bash}" "$scripts/install-node.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.python; then "${BASH:-bash}" "$scripts/install-python.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.php; then "${BASH:-bash}" "$scripts/install-php.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.rust; then "${BASH:-bash}" "$scripts/install-rust.sh" --uninstall $audit_flag; fi
@@ -134,6 +134,9 @@ fi
 # Install Homebrew first as a dependency for other tools on macOS/Linux
 if devsetup_enabled user.install.homebrew; then
 	"${BASH:-bash}" "$scripts/install-homebrew.sh" $audit_flag $upgrade_flag
+	if [[ $audit -eq 0 ]]; then
+		devsetup_activate_homebrew || devsetup_status warn Homebrew "could not activate Homebrew for later setup steps"
+	fi
 else
 	devsetup_status skip Homebrew "user.install.homebrew is false"
 fi
