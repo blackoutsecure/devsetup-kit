@@ -186,6 +186,40 @@ devsetup_homebrew_path() {
 	return 1
 }
 
+devsetup_rust_tool_path() {
+	local tool="$1" candidate cargo_bin brew_path formula brew_tool
+	cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
+	candidate="$(command -v "$tool" || true)"
+	if [[ -z "$candidate" && -x "$cargo_bin/$tool" ]]; then candidate="$cargo_bin/$tool"; fi
+	brew_path="$(devsetup_homebrew_path || true)"
+	if [[ -n "$brew_path" ]]; then
+		formula="$(devsetup_config advanced.rust.homebrewFormula rustup)"
+		brew_tool="$("$brew_path" --prefix)/opt/$formula/bin/$tool"
+		if [[ -x "$brew_tool" && ( -z "$candidate" || "$candidate" -ef "$brew_tool" ) ]]; then
+			candidate="$brew_tool"
+		fi
+	fi
+	[[ -n "$candidate" ]] || return 1
+	printf '%s\n' "$candidate"
+}
+
+devsetup_persist_rust_path() {
+	local tool_dir="$1" audit="${2:-0}" cargo_bin profile path_line
+	cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
+	profile="$HOME/.profile"
+	if [[ "$(uname -s)" == Darwin ]]; then profile="$HOME/.zprofile"; fi
+	printf -v path_line "export PATH=%q:%q:\"\$PATH\"" "$tool_dir" "$cargo_bin"
+	if [[ -f "$profile" ]] && grep -Fqx "$path_line" "$profile"; then
+		devsetup_status found "Rust PATH" "already configured in $profile"
+	elif [[ "$audit" -eq 1 ]]; then
+		devsetup_status install "Rust PATH" "would add Rust tools to $profile (new login shells)"
+	else
+		if [[ -f "$profile" ]]; then cp "$profile" "$profile.devsetup-backup-$(date -u +%Y%m%d%H%M%S)"; fi
+		printf '\n# Added by bos-devsetup-kit for Rust.\n%s\n' "$path_line" >> "$profile"
+		devsetup_status install "Rust PATH" "added Rust tools to $profile (new login shells)"
+	fi
+}
+
 devsetup_activate_homebrew() {
 	local brew_path
 	brew_path="$(devsetup_homebrew_path 2>/dev/null || true)"

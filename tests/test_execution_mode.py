@@ -195,7 +195,7 @@ try {
 }
 Write-Host "PASS: $($scripts.Count) entrypoints blocked inherited elevation"
 """)
-            self.assertIn("PASS: 16 entrypoints", output)
+            self.assertIn("PASS: 17 entrypoints", output)
 
     def test_admin_opt_in_does_not_widen_winget_install_or_uninstall_scope(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -309,7 +309,7 @@ if output="$(bash setup.sh --uninstall --check-upgrades-only 2>&1)"; then exit 1
 [[ ! -f "$HOME/unexpected" ]]
 printf 'PASS: %s entrypoints blocked root\n' "$count"
 """)
-            self.assertIn("PASS: 16 entrypoints", output)
+            self.assertIn("PASS: 17 entrypoints", output)
 
     def test_homebrew_shared_prefix_requires_opt_in_but_root_is_never_supported(self):
         with tempfile.TemporaryDirectory() as temporary:

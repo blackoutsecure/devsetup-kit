@@ -83,6 +83,7 @@ if [[ $uninstall -eq 1 ]]; then
 	if devsetup_enabled user.install.python; then "${BASH:-bash}" "$scripts/install-python.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.php; then "${BASH:-bash}" "$scripts/install-php.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.rust; then "${BASH:-bash}" "$scripts/install-rust.sh" --uninstall $audit_flag; fi
+	if devsetup_enabled user.install.dioxus; then "${BASH:-bash}" "$scripts/install-dioxus.sh" --uninstall $audit_flag; else devsetup_status skip "Dioxus CLI" "user.install.dioxus is false"; fi
 	if devsetup_enabled user.install.powershell; then "${BASH:-bash}" "$scripts/install-powershell.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.shellcheck; then "${BASH:-bash}" "$scripts/install-shellcheck.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.ripgrep; then "${BASH:-bash}" "$scripts/install-ripgrep.sh" --uninstall $audit_flag; fi
@@ -109,6 +110,7 @@ if [[ $check_upgrades_only -eq 1 ]]; then
 	if devsetup_enabled user.install.python; then "${BASH:-bash}" "$scripts/install-python.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.php; then "${BASH:-bash}" "$scripts/install-php.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.rust; then "${BASH:-bash}" "$scripts/install-rust.sh" --audit --check-upgrades; fi
+	if devsetup_enabled user.install.dioxus; then "${BASH:-bash}" "$scripts/install-dioxus.sh" --audit --check-upgrades; else devsetup_status skip "Dioxus CLI" "user.install.dioxus is false"; fi
 	if devsetup_enabled user.install.powershell; then "${BASH:-bash}" "$scripts/install-powershell.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.shellcheck; then "${BASH:-bash}" "$scripts/install-shellcheck.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.ripgrep; then "${BASH:-bash}" "$scripts/install-ripgrep.sh" --audit --check-upgrades; fi
@@ -191,6 +193,12 @@ else
 	devsetup_status skip Rust "user.install.rust is false"
 fi
 
+if devsetup_enabled user.install.dioxus; then
+	"${BASH:-bash}" "$scripts/install-dioxus.sh" $audit_flag $upgrade_flag
+else
+	devsetup_status skip "Dioxus CLI" "user.install.dioxus is false"
+fi
+
 php_command=""
 if devsetup_enabled user.install.php; then
 	if [[ $audit -eq 1 ]]; then
@@ -204,12 +212,12 @@ fi
 
 powershell_command=""
 if devsetup_enabled user.install.powershell; then
-	powershell_flags=()
-	[[ $upgrade_powershell -eq 1 ]] && powershell_flags+=(--upgrade)
+	powershell_upgrade_flag=""
+	[[ $upgrade_powershell -eq 1 ]] && powershell_upgrade_flag="--upgrade"
 	if [[ $audit -eq 1 ]]; then
-		"${BASH:-bash}" "$scripts/install-powershell.sh" --audit $upgrade_flag "${powershell_flags[@]}"
+		"${BASH:-bash}" "$scripts/install-powershell.sh" --audit $upgrade_flag $powershell_upgrade_flag
 	else
-		powershell_command="$("${BASH:-bash}" "$scripts/install-powershell.sh" --print-path $upgrade_flag "${powershell_flags[@]}")"
+		powershell_command="$("${BASH:-bash}" "$scripts/install-powershell.sh" --print-path $upgrade_flag $powershell_upgrade_flag)"
 	fi
 else
 	devsetup_status skip PowerShell "user.install.powershell is false"
