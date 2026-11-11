@@ -58,8 +58,10 @@ devsetup_status found "Rust homes" "Cargo: ${CARGO_HOME:-$HOME/.cargo}; rustup: 
 rustup="$(devsetup_rust_tool_path rustup || true)"
 if [[ -z "$rustup" ]]; then
 	if [[ $audit -eq 1 ]]; then
-		devsetup_status install Rust "would install $formula via Homebrew and stable with $selection"
-		devsetup_status install "Rust PATH" "would add Rust tools to the login shell profile after installation"
+		if devsetup_audit_homebrew_install Rust "$formula"; then
+			devsetup_status install Rust "would install stable with $selection"
+			devsetup_status install "Rust PATH" "would add Rust tools to the login shell profile after installation"
+		fi
 		devsetup_status skip "Rust build" "linker readiness is unverified; audit does not compile or run code"
 		exit 0
 	fi

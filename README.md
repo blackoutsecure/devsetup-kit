@@ -86,6 +86,8 @@ Audit mode installs nothing, writes no files, and does not touch git config or `
 Run setup from a normal, non-elevated account with a writable home directory. All runners,
 standalone installers, and the Python applier reject elevated write runs by default. Existing working
 system-installed tools can be reused without elevation; they do not need to be reinstalled.
+On Unix, audit reports a shared Homebrew prefix as blocked when standard-user
+setup would refuse to modify it. Existing Git credential helpers are preserved.
 
 Setup never closes or reloads VS Code, terminates existing terminal sessions, or restarts
 WSL as part of its default flow. It prints manual restart guidance in the terminal after

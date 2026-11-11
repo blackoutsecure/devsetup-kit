@@ -44,7 +44,7 @@ os="$(uname -s 2>/dev/null || printf '%s' "${MSYSTEM:-Windows}")"
 
 if [[ $audit -eq 1 ]]; then
 	case "$os" in
-		Darwin|Linux) devsetup_status install Node.js "would install '$formula' via user-local Homebrew" ;;
+		Darwin|Linux) devsetup_audit_homebrew_install Node.js "$formula" || true ;;
 		*) devsetup_status warn Node.js "unsupported OS: $os" ;;
 	esac
 	exit 0

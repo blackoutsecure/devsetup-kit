@@ -57,13 +57,43 @@ if [[ $check_upgrades -eq 1 && $git_present -eq 1 && "$os" == "Linux" ]]; then
 	devsetup_check_homebrew_upgrade Git "$formula"
 fi
 
+git_credential_helper_status() {
+	local helper effective exec_path config_status
+	case "$os" in
+		Darwin) helper="$(devsetup_config advanced.git.credential.macos.helper osxkeychain)" ;;
+		*)      helper="$(devsetup_config advanced.git.credential.linux.helper manager)" ;;
+	esac
+	if effective="$(git config --get credential.helper)"; then
+		if [[ "$effective" == "$helper" ]]; then
+			devsetup_status found "git cfg" "credential helper '$helper' already configured"
+		else
+			devsetup_status skip "git cfg" "existing credential helper preserved"
+		fi
+	else
+		config_status=$?
+		if [[ $config_status -ne 1 ]]; then return "$config_status"; fi
+		exec_path="$(git --exec-path)"
+		if command -v "git-credential-$helper" >/dev/null 2>&1 || [[ -x "$exec_path/git-credential-$helper" ]]; then
+			if [[ $audit -eq 1 ]]; then
+				devsetup_status install "git cfg" "would set credential helper to '$helper'"
+			else
+				git config --global credential.helper "$helper"
+				devsetup_status install "git cfg" "credential helper set to '$helper'"
+			fi
+		else
+			devsetup_status skip "git cfg" "credential helper '$helper' is not installed"
+		fi
+	fi
+}
+
 if [[ $audit -eq 1 ]]; then
 	if [[ $git_present -eq 0 ]]; then
 		case "$os" in
 			Darwin) devsetup_status warn Git "missing; run xcode-select --install once" ;;
-			Linux)  devsetup_status install Git "would install '$formula' via Homebrew" ;;
+			Linux)  devsetup_audit_homebrew_install Git "$formula" || true ;;
 		esac
 	fi
+	if [[ $git_present -eq 1 ]]; then git_credential_helper_status; fi
 	devsetup_git_identity_status 1
 	if [[ $print_path -eq 1 && $git_present -eq 1 ]]; then
 		command -v git
@@ -97,19 +127,7 @@ if [[ $git_present -eq 0 ]]; then
 	esac
 fi
 
-case "$os" in
-	Darwin) helper="$(devsetup_config advanced.git.credential.macos.helper osxkeychain)" ;;
-	*)      helper="$(devsetup_config advanced.git.credential.linux.helper manager)" ;;
-esac
-
-if [[ "$(git config --global --get credential.helper 2>/dev/null || true)" == "$helper" ]]; then
-	devsetup_status found "git cfg" "credential helper already '$helper'"
-elif command -v "git-credential-$helper" >/dev/null 2>&1; then
-	git config --global credential.helper "$helper"
-	devsetup_status install "git cfg" "credential helper set to '$helper'"
-else
-	devsetup_status skip "git cfg" "credential helper '$helper' is not installed"
-fi
+git_credential_helper_status
 
 user_name="$(devsetup_config user.git.userName "")"
 user_email="$(devsetup_config user.git.userEmail "")"

@@ -56,23 +56,30 @@ devsetup_assert_execution_mode() {
 	fi
 }
 
-devsetup_assert_homebrew_write() {
+devsetup_homebrew_write_problem() {
 	local prefix home_root
 	if devsetup_is_elevated; then
 		printf 'Homebrew does not support root execution, even with DEVSETUP_ADMIN_MODE=1. Use a standard user.\n' >&2
 		return 1
 	fi
-	prefix="$(brew --prefix)" || return 1
-	prefix="$(cd "$prefix" && pwd -P)" || return 1
-	home_root="$(cd "$HOME" && pwd -P)" || return 1
+	prefix="$(brew --prefix)" || { printf 'Cannot determine the Homebrew prefix.\n' >&2; return 1; }
+	prefix="$(cd "$prefix" && pwd -P)" || { printf 'Cannot resolve the Homebrew prefix.\n' >&2; return 1; }
+	home_root="$(cd "$HOME" && pwd -P)" || { printf 'Cannot resolve the user home directory.\n' >&2; return 1; }
 	if [[ "${DEVSETUP_ADMIN_MODE:-0}" == 1 ]]; then return 0; fi
 	case "$prefix" in
 		"$home_root"/*) ;;
 		*)
-			devsetup_status warn Homebrew "refusing to modify shared prefix $prefix in standard-user mode; use user-local Homebrew or explicitly opt in with DEVSETUP_ADMIN_MODE=1 from a permitted non-root account" >&2
+			printf 'refusing to modify shared prefix %s in standard-user mode; use user-local Homebrew or explicitly opt in with DEVSETUP_ADMIN_MODE=1 from a permitted non-root account\n' "$prefix" >&2
 			return 1
 			;;
 	esac
+}
+
+devsetup_assert_homebrew_write() {
+	local problem
+	if problem="$(devsetup_homebrew_write_problem 2>&1)"; then return 0; fi
+	devsetup_status warn Homebrew "$problem" >&2
+	return 1
 }
 
 devsetup_config_reader() {
@@ -228,6 +235,17 @@ devsetup_activate_homebrew() {
 	command -v brew >/dev/null 2>&1
 }
 
+devsetup_audit_homebrew_install() {
+	local component="$1" formula="$2" problem
+	if devsetup_homebrew_path >/dev/null 2>&1; then
+		if ! problem="$(devsetup_activate_homebrew && devsetup_homebrew_write_problem 2>&1)"; then
+			devsetup_status warn "$component" "cannot install '$formula': ${problem:-Homebrew could not be activated}"
+			return 1
+		fi
+	fi
+	devsetup_status install "$component" "would install '$formula' via Homebrew"
+}
+
 devsetup_persist_homebrew_shellenv() {
 	local brew_path="$1" profile shellenv_line backup
 	if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
@@ -326,7 +344,7 @@ devsetup_install_via_homebrew() {
 			[[ "$check_upgrades" -eq 1 ]] && devsetup_check_homebrew_upgrade "$component" "$formula"
 		else
 			case "$(uname -s 2>/dev/null)" in
-				Darwin|Linux) devsetup_status install "$component" "would install '$formula' via user-local Homebrew" ;;
+				Darwin|Linux) devsetup_audit_homebrew_install "$component" "$formula" || true ;;
 				*) devsetup_status warn "$component" "missing and Homebrew is unavailable on this platform" ;;
 			esac
 		fi

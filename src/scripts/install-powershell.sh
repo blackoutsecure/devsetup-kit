@@ -92,7 +92,7 @@ if [[ -n "$command_path" ]]; then
 	installed="$(powershell_version "$command_path")"
 	devsetup_status found PowerShell "installed $installed at $command_path" >&2
 elif [[ $audit -eq 1 ]]; then
-	devsetup_status install PowerShell "would install '$formula' via user-local Homebrew" >&2
+	devsetup_audit_homebrew_install PowerShell "$formula" >&2 || true
 else
 	command_path="$(devsetup_install_via_homebrew PowerShell "$formula" pwsh \
 		"Install it from https://learn.microsoft.com/powershell/." 0 1 0)"
