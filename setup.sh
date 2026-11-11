@@ -47,6 +47,19 @@ if [[ $uninstall -eq 1 && $upgrade_rust -eq 1 ]]; then
 	exit 2
 fi
 
+apply_command="./setup.sh"
+if [[ "$DEVSETUP_CONFIG_FILE" != "$DEVSETUP_ROOT/config/dev-setup.config.json" ]]; then
+	printf -v config_assignment 'DEVSETUP_CONFIG_FILE=%q ' "$DEVSETUP_CONFIG_FILE"
+	apply_command="$config_assignment$apply_command"
+fi
+[[ $uninstall -eq 1 ]] && apply_command="$apply_command --uninstall"
+[[ $skip_upgrade_check -eq 1 ]] && apply_command="$apply_command --skip-upgrade-check"
+[[ $skip_settings_sync -eq 1 ]] && apply_command="$apply_command --skip-settings-sync"
+if [[ $check_upgrades_only -eq 0 ]]; then
+	[[ $upgrade_powershell -eq 1 ]] && apply_command="$apply_command --upgrade-powershell"
+	[[ $upgrade_rust -eq 1 ]] && apply_command="$apply_command --upgrade-rust"
+fi
+
 os="$(uname -s 2>/dev/null || printf '%s' "${MSYSTEM:-Windows}")"
 case "$os" in
 	MINGW*|MSYS*|CYGWIN*)
@@ -96,7 +109,7 @@ if [[ $uninstall -eq 1 ]]; then
 	else
 		echo "Uninstall complete."
 	fi
-	devsetup_summary "$DEVSETUP_STATUS_LOG" "$audit"
+	devsetup_summary "$DEVSETUP_STATUS_LOG" "$audit" "$apply_command"
 	exit 0
 fi
 
@@ -119,7 +132,7 @@ if [[ $check_upgrades_only -eq 1 ]]; then
 	if devsetup_enabled user.install.gpg; then "${BASH:-bash}" "$scripts/install-gpg.sh" --audit --check-upgrades; fi
 	echo
 	echo "Upgrade check complete. Nothing was installed or changed."
-	devsetup_summary "$DEVSETUP_STATUS_LOG" 1
+	devsetup_summary "$DEVSETUP_STATUS_LOG" 1 "$apply_command"
 	exit 0
 fi
 
@@ -304,7 +317,4 @@ else
 	devsetup_status skip restart "VS Code and terminal sessions remain open. If PATH or extensions need a restart, save your work and reopen VS Code or start a new terminal yourself when ready."
 fi
 
-apply_command="./setup.sh"
-[[ $upgrade_powershell -eq 1 ]] && apply_command="$apply_command --upgrade-powershell"
-[[ $upgrade_rust -eq 1 ]] && apply_command="$apply_command --upgrade-rust"
 devsetup_summary "$DEVSETUP_STATUS_LOG" "$audit" "$apply_command"

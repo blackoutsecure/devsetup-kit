@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -64,6 +65,10 @@ class SetupEntrypointTests(unittest.TestCase):
             env["COPILOT_HOME"] = str(sandbox / "copilot")
             env["NO_COLOR"] = "1"
             env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+            if os.name != "nt":
+                custom_config = sandbox / "custom config.json"
+                custom_config.write_text(json.dumps(config))
+                env["DEVSETUP_CONFIG_FILE"] = str(custom_config)
             if os.name == "nt":
                 shell = shutil.which("powershell")
                 if not shell:
@@ -90,7 +95,15 @@ class SetupEntrypointTests(unittest.TestCase):
                 self.assertIn("Summary:", result.stdout)
                 return result.stdout
 
-            run(audit_option)
+            audit = run(audit_option)
+            if os.name != "nt":
+                recommendation = next(
+                    line for line in audit.splitlines() if line.startswith("Run this to apply them: ")
+                )
+                self.assertEqual(
+                    shlex.split(recommendation.split(": ", 1)[1]),
+                    [f"DEVSETUP_CONFIG_FILE={custom_config}", "./setup.sh"],
+                )
             self.assertFalse((profile / "settings.json").exists())
             self.assertFalse((sandbox / "copilot").exists())
             first = run()

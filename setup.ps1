@@ -120,6 +120,22 @@ if (-not $PythonVersion) {
     $PythonVersion = Get-DevSetupValue $config "user.python.version" "3.14"
 }
 
+$applyCommand = ".\setup.ps1"
+if ($Uninstall) { $applyCommand += " -Uninstall" }
+if ($PSBoundParameters.ContainsKey("PythonVersion")) {
+    $applyCommand += " -PythonVersion '$($PythonVersion.Replace("'", "''"))'"
+}
+if (-not $Uninstall -and $PSBoundParameters.ContainsKey("GitInstallDir")) {
+    $applyCommand += " -GitInstallDir '$($GitInstallDir.Replace("'", "''"))'"
+}
+if ($SkipVSCodeSettings) { $applyCommand += " -SkipVSCodeSettings" }
+if ($SkipSettingsSync) { $applyCommand += " -SkipSettingsSync" }
+if ($SkipUpgradeCheck) { $applyCommand += " -SkipUpgradeCheck" }
+if (-not $CheckUpgradesOnly) {
+    if ($UpgradePowerShell) { $applyCommand += " -UpgradePowerShell" }
+    if ($UpgradeRust) { $applyCommand += " -UpgradeRust" }
+}
+
 $configureVSCode = (-not $SkipVSCodeSettings) -and (Get-DevSetupValue $config "user.install.vscodeSettings" $true)
 $checkUpgrades = $CheckUpgradesOnly -or ((-not $SkipUpgradeCheck) -and (Get-DevSetupValue $config "user.checkUpgrades" $true))
 $gitExe = $null
@@ -185,7 +201,7 @@ if ($Uninstall) {
     } else {
         Write-Host "Uninstall complete."
     }
-    Write-DevSetupSummary -LogPath $statusLog -Audit:$Audit
+    Write-DevSetupSummary -LogPath $statusLog -Audit:$Audit -ApplyCommand $applyCommand
     Remove-Item $statusLog -ErrorAction SilentlyContinue
     Remove-Item Env:\DEVSETUP_STATUS_LOG -ErrorAction SilentlyContinue
     return
@@ -240,7 +256,7 @@ if ($CheckUpgradesOnly) {
 
     Write-Host ""
     Write-Host "Upgrade check complete. Nothing was installed or changed."
-    Write-DevSetupSummary -LogPath $statusLog -Audit
+    Write-DevSetupSummary -LogPath $statusLog -Audit -ApplyCommand $applyCommand
     Remove-Item $statusLog -ErrorAction SilentlyContinue
     Remove-Item Env:\DEVSETUP_STATUS_LOG -ErrorAction SilentlyContinue
     return
@@ -387,9 +403,6 @@ if ($Audit) {
     Write-DevSetupStatus skip "restart" "VS Code and terminal sessions remain open. If PATH or extensions need a restart, save your work and reopen VS Code or start a new terminal yourself when ready."
 }
 
-$applyCommand = ".\setup.ps1"
-if ($UpgradePowerShell) { $applyCommand += " -UpgradePowerShell" }
-if ($UpgradeRust) { $applyCommand += " -UpgradeRust" }
 Write-DevSetupSummary -LogPath $statusLog -Audit:$Audit -ApplyCommand $applyCommand
 Remove-Item $statusLog -ErrorAction SilentlyContinue
 Remove-Item Env:\DEVSETUP_STATUS_LOG -ErrorAction SilentlyContinue
