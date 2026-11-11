@@ -25,6 +25,7 @@ foreach ($name in @($components) + @($targets)) {
         throw "Invalid Rust component or target name: '$name'. Use names reported by rustup component list or rustup target list."
     }
 }
+$components = @((@("cargo", "rustc") + $components) | Select-Object -Unique)
 $selection = "components [$($components -join ', ')], targets [$($targets -join ', ')]"
 $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
 $rustupHome = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $env:USERPROFILE ".rustup" }
@@ -32,10 +33,7 @@ Write-DevSetupStatus found "Rust homes" "Cargo: $cargoHome; rustup: $rustupHome 
 $cargoBin = Join-Path $cargoHome "bin"
 $packageId = Get-DevSetupValue $config "advanced.rust.wingetPackageId" "Rustlang.Rustup"
 $find = {
-    $command = Get-Command rustup.exe -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
-    $candidate = Join-Path $cargoBin "rustup.exe"
-    if (Test-Path $candidate) { return $candidate }
+    Find-DevSetupRustExecutable "rustup"
 }
 $fallback = {
     $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
@@ -85,12 +83,15 @@ if (-not $rustup) {
 function Invoke-Rustup {
     param([string[]]$Arguments)
     $autoInstall = $env:RUSTUP_AUTO_INSTALL
+    $previousPath = $env:Path
     try {
         $env:RUSTUP_AUTO_INSTALL = "0"
+        $env:Path = "$cargoBin;$(Split-Path -Parent $rustup);$previousPath"
         & $rustup @Arguments
         if ($LASTEXITCODE -ne 0) { throw "rustup $($Arguments -join ' ') failed (exit $LASTEXITCODE)" }
     } finally {
         $env:RUSTUP_AUTO_INSTALL = $autoInstall
+        $env:Path = $previousPath
     }
 }
 
@@ -195,13 +196,16 @@ if ($targets.Count -gt 0) {
     }
 }
 foreach ($tool in @("rustc", "cargo")) {
-    $version = Invoke-Rustup -Arguments @("run", $stableToolchain, $tool, "--version")
-    Write-DevSetupStatus found "Rust $tool" "$version"
+    if (Test-RustEntry $installed $tool -Component) {
+        $version = Invoke-Rustup -Arguments @("run", $stableToolchain, $tool, "--version")
+        Write-DevSetupStatus found "Rust $tool" "$version"
+    }
 }
 if ((Test-RustEntry $components "rustfmt" -Component) -and (Test-RustEntry $installed "rustfmt" -Component)) {
     Write-DevSetupStatus found "Rust rustfmt version" "$(Invoke-Rustup -Arguments @('run', $stableToolchain, 'rustfmt', '--version'))"
 }
-if ((Test-RustEntry $components "clippy" -Component) -and (Test-RustEntry $installed "clippy" -Component)) {
+if ((Test-RustEntry $components "clippy" -Component) -and (Test-RustEntry $installed "clippy" -Component) -and
+    (Test-RustEntry $installed "cargo" -Component)) {
     Write-DevSetupStatus found "Rust clippy version" "$(Invoke-Rustup -Arguments @('run', $stableToolchain, 'cargo', 'clippy', '--version'))"
 }
 if ((Test-RustEntry $components "rust-analyzer" -Component) -and (Test-RustEntry $installed "rust-analyzer" -Component)) {
@@ -230,16 +234,35 @@ $probe = Join-Path ([IO.Path]::GetTempPath()) ("devsetup-rust-{0}" -f [guid]::Ne
 New-Item -ItemType Directory -Path $probe | Out-Null
 try {
     $source = Join-Path $probe "probe.rs"
-    $binary = Join-Path $probe "probe.exe"
-    Set-Content -Path $source -Value 'fn main() { println!("rust-ready"); }' -Encoding ASCII
+    $manifest = Join-Path $probe "Cargo.toml"
+    $targetDir = Join-Path $probe "target"
+    $binary = Join-Path $targetDir "$($defaultHost[0])\debug\devsetup_probe.exe"
+    Set-Content -LiteralPath $source -Value 'fn main() { println!("rust-ready"); }' -Encoding ASCII
+    Set-Content -LiteralPath $manifest -Encoding ASCII -Value @'
+[package]
+name = "devsetup_probe"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "devsetup_probe"
+path = "probe.rs"
+'@
     try {
-        $output = Invoke-Rustup -Arguments @("run", $stableToolchain, "rustc", "--edition", "2021", "--crate-name", "devsetup_probe", $source, "-o", $binary) 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) { throw $output.Trim() }
+        Push-Location $probe
+        try {
+            Invoke-Rustup -Arguments @("run", $stableToolchain, "cargo", "build", "--offline", "--quiet",
+                "--target", $defaultHost[0], "--manifest-path", $manifest, "--target-dir", $targetDir) | Out-Host
+        } finally {
+            Pop-Location
+        }
         $output = & $binary 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0 -or $output.Trim() -ne "rust-ready") { throw "compiled probe did not run successfully: $output" }
-        Write-DevSetupStatus found "Rust build" "stable compiled, linked, and ran a native executable"
+        Write-DevSetupStatus found "Rust build" "Cargo compiled, linked, and ran a native executable with stable"
     } catch {
-        Write-DevSetupStatus warn "Rust build" "toolchain installed but native build/run failed: $($_.Exception.Message). MSVC needs C++ Build Tools; GNU needs compatible MinGW tools. No admin install or global linker override was attempted."
+        Write-DevSetupStatus warn "Rust build" "toolchain installed but Cargo native build/run failed: $($_.Exception.Message). Check Cargo configuration; MSVC needs C++ Build Tools and GNU needs compatible MinGW tools. No admin install or global linker override was attempted."
     }
 } finally {
     Remove-Item -LiteralPath $probe -Recurse -Force

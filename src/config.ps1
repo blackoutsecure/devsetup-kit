@@ -76,6 +76,16 @@ function Get-DevSetupStringList {
     $node | Select-Object -Unique
 }
 
+function Find-DevSetupRustExecutable {
+    param([Parameter(Mandatory)][string]$Name)
+
+    $command = Get-Command "$Name.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) { return $command.Source }
+    $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
+    $candidate = Join-Path $cargoHome "bin\$Name.exe"
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+}
+
 function ConvertTo-DevSetupHashtable {
     <# PSCustomObject from ConvertFrom-Json -> hashtable, for iteration. #>
     param($Value)

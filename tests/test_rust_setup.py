@@ -25,7 +25,7 @@ class RustInstallerTests(unittest.TestCase):
             shutil.copyfile(ROOT / "src" / "scripts" / name, scripts / name)
         for name in ("setup.ps1", "setup.sh"):
             shutil.copyfile(ROOT / name, root / name)
-        (root / "components").write_text("rustfmt-host\n", encoding="utf-8")
+        (root / "components").write_text("cargo-host\nrustc-host\nrustfmt-host\n", encoding="utf-8")
         (root / "targets").write_text("host\n", encoding="utf-8")
         install = {
             name: False for name in json.loads(
@@ -141,6 +141,54 @@ class RustInstallerTests(unittest.TestCase):
         self.assertIn("user.install.rust is false", run(flags["setup_upgrade"], setup=True))
         self.assertIn("cannot be combined",
                       run(flags["uninstall"], flags["upgrade"], success=False))
+
+    def exercise_cargo_support(self, root, run, audit):
+        config = json.loads((root / "config.json").read_text())
+        config["user"]["rust"] = {"components": ["clippy"], "targets": []}
+        (root / "config.json").write_text(json.dumps(config))
+        (root / "components").write_text("rustc-host\nclippy-host\n")
+        (root / "calls").write_text("")
+        self.assertIn("would add component", run(audit))
+        self.assertNotIn("cargo clippy --version", (root / "calls").read_text())
+        self.assertEqual((root / "components").read_text(), "rustc-host\nclippy-host\n")
+
+        config["user"]["rust"] = {"components": [], "targets": []}
+        (root / "config.json").write_text(json.dumps(config))
+        (root / "components").write_text("")
+        (root / "calls").write_text("")
+        output = run(audit)
+        self.assertIn("Rust cargo", output)
+        self.assertIn("would add component", output)
+        self.assertEqual((root / "components").read_text(), "")
+        calls = (root / "calls").read_text()
+        self.assertNotIn("component add", calls)
+        self.assertNotIn("cargo --version", calls)
+        self.assertNotIn("cargo build", calls)
+
+        (root / "calls").write_text("")
+        output = run()
+        self.assertIn("Cargo compiled, linked, and ran", output)
+        calls = (root / "calls").read_text()
+        for component in ("cargo", "rustc"):
+            self.assertEqual(
+                calls.count(f"component add --toolchain stable-host {component}"), 1,
+            )
+        self.assertIn("cargo build --offline", calls)
+        self.assertFalse(Path((root / "probe-dir").read_text().strip()).exists())
+        (root / "calls").write_text("")
+        second = run()
+        self.assertNotIn("[install]", second)
+        self.assertNotIn("[warn]", second)
+        self.assertNotIn("component add", (root / "calls").read_text())
+
+        (root / "cargo-failure").touch()
+        try:
+            output = run()
+            self.assertIn("native build/run failed", output)
+            self.assertIn("fixture cargo failure", output)
+            self.assertFalse(Path((root / "probe-dir").read_text().strip()).exists())
+        finally:
+            (root / "cargo-failure").unlink()
 
     @unittest.skipUnless(POWERSHELL, "Windows PowerShell is required")
     def test_windows_bootstrap_verifies_digest_before_execution(self):
@@ -303,7 +351,7 @@ switch ($arguments[0]) {
         if (Test-Path (Join-Path $env:FIXTURE 'no-stable')) { throw 'Stable host is missing' }
         if ($arguments[1] -eq 'list') {
             if ($arguments -contains '--installed') { Get-Content (Join-Path $env:FIXTURE 'components') }
-            else { 'rustfmt-host'; 'clippy-host'; 'rust-src'; 'rust-docs-host'; 'rustc-host'; 'rustc-dev-host' }
+            else { 'cargo-host'; 'rustfmt-host'; 'clippy-host'; 'rust-src'; 'rust-docs-host'; 'rustc-host'; 'rustc-dev-host' }
         } elseif (-not (Test-Path (Join-Path $env:FIXTURE 'silent-add'))) {
             Add-Content (Join-Path $env:FIXTURE 'components') $arguments[-1]
         }
@@ -341,7 +389,27 @@ switch ($arguments[0]) {
             }
             "$($arguments[2]) fixture"
         }
-        else {
+        elseif ($arguments[2] -eq 'cargo' -and $arguments[3] -eq 'build') {
+            foreach ($flag in @('--offline', '--quiet', '--manifest-path', '--target-dir', '--target')) {
+                if ($arguments -notcontains $flag) { throw "Cargo probe missing $flag" }
+            }
+            $manifest = $arguments[[array]::IndexOf($arguments, '--manifest-path') + 1]
+            $targetDir = $arguments[[array]::IndexOf($arguments, '--target-dir') + 1]
+            $probe = Split-Path $manifest
+            if ((Get-Location).Path -ne $probe) { throw 'Cargo inherited the project working directory' }
+            if ($arguments[[array]::IndexOf($arguments, '--target') + 1] -ne 'host') { throw 'Cargo probe must use the native host' }
+            if ((Get-Content $manifest -Raw) -notmatch '\[workspace\]') { throw 'Cargo probe must be a standalone workspace' }
+            if ($targetDir -ne (Join-Path $probe 'target')) { throw 'Cargo probe outputs must be isolated' }
+            Set-Content (Join-Path $env:FIXTURE 'probe-dir') $probe
+            if (Test-Path (Join-Path $env:FIXTURE 'cargo-failure')) {
+                [Console]::Error.WriteLine('fixture cargo failure')
+                exit 1
+            }
+            if (Test-Path (Join-Path $env:FIXTURE 'fail')) { Write-Output 'fixture linker missing'; exit 1 }
+            $destination = Join-Path $targetDir 'host\debug'
+            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+            Copy-Item (Join-Path $env:FIXTURE 'ready.exe') (Join-Path $destination 'devsetup_probe.exe')
+        } else {
             if (Test-Path (Join-Path $env:FIXTURE 'fail')) { Write-Output 'fixture linker missing'; exit 1 }
             $destination = $arguments[-1]
             Copy-Item (Join-Path $env:FIXTURE 'ready.exe') $destination
@@ -399,7 +467,7 @@ Add-Type -TypeDefinition 'public class Ready { public static void Main() { Syste
             self.assertEqual((root / "components").read_bytes(), original)
             calls = (root / "calls").read_text()
             self.assertNotIn("component add", calls)
-            self.assertNotIn("probe.rs", calls)
+            self.assertNotIn("cargo build", calls)
             applied = run()
             self.assertIn("compiled, linked, and ran", applied)
             self.assertIn("Rust clippy version", applied)
@@ -415,6 +483,7 @@ Add-Type -TypeDefinition 'public class Ready { public static void Main() { Syste
             self.assertIn("native build/run failed", run())
             self.assertIn("preserved", run("-Uninstall"))
             self.exercise_component_requests(root, run, "-Audit")
+            self.exercise_cargo_support(root, run, "-Audit")
             self.exercise_explicit_updates(root, run, {
                 "audit": "-Audit", "upgrade": "-Upgrade", "setup_upgrade": "-UpgradeRust",
                 "skip_check": "-SkipUpgradeCheck", "check_only": "-CheckUpgradesOnly",
@@ -433,7 +502,10 @@ devsetup_status() {
     printf '[%s] %s %s\\n' "$1" "$2" "$3"
     printf '%s|%s|%s\\n' "$1" "$2" "$3" >> "$HOME/status.log"
 }
-devsetup_homebrew_path() { return 1; }
+devsetup_homebrew_path() {
+    if [[ -x "$HOME/brew" ]]; then printf '%s\\n' "$HOME/brew"
+    else return 1; fi
+}
 """, encoding="utf-8")
             (root / "rustup").write_text("""#!/usr/bin/env bash
 set -eu
@@ -457,7 +529,7 @@ component)
     [[ " $* " == *" stable-host "* && ! -f "$HOME/no-stable" ]] || exit 2
     if [[ "$2" == list ]]; then
         if [[ " $* " == *" --installed "* ]]; then cat "$HOME/components"
-        else printf '%s\\n' rustfmt-host clippy-host rust-src rust-docs-host rustc-host rustc-dev-host; fi
+        else printf '%s\\n' cargo-host rustfmt-host clippy-host rust-src rust-docs-host rustc-host rustc-dev-host; fi
     elif [[ ! -f "$HOME/silent-add" ]]; then
         printf '%s\\n' "${@: -1}" >> "$HOME/components"
     fi ;;
@@ -480,7 +552,34 @@ run)
         if [[ "$3" == rustfmt && -f "$HOME/version-failure" ]]; then echo 'fixture version failure' >&2; exit 7; fi
         if [[ "$3" == rustfmt ]]; then grep -Eq '^rustfmt(-host)?$' "$HOME/components" || exit 3; fi
         if [[ " $* " == *" clippy "* ]]; then grep -Eq '^clippy(-host)?$' "$HOME/components" || exit 3; fi
+        if [[ " $* " == *" clippy "* && -f "$HOME/check-cargo-proxies" ]]; then
+            cargo-clippy --version
+            exit
+        fi
         echo "$3 fixture"
+    elif [[ "$3" == cargo && "$4" == build ]]; then
+        shift 4
+        manifest="" target_dir="" target="" offline=0 quiet=0
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+            --offline) offline=1 ;;
+            --quiet) quiet=1 ;;
+            --manifest-path) shift; manifest="$1" ;;
+            --target-dir) shift; target_dir="$1" ;;
+            --target) shift; target="$1" ;;
+            *) echo "Unexpected Cargo argument: $1" >&2; exit 2 ;;
+            esac
+            shift
+        done
+        [[ "$offline" == 1 && "$quiet" == 1 && "$target" == host ]] || exit 2
+        [[ "$PWD/Cargo.toml" == "$manifest" && "$PWD/target" == "$target_dir" ]] || exit 2
+        grep -Fq '[workspace]' "$manifest" || exit 2
+        printf '%s\\n' "$PWD" > "$HOME/probe-dir"
+        if [[ -f "$HOME/cargo-failure" ]]; then echo 'fixture cargo failure' >&2; exit 1; fi
+        if [[ -f "$HOME/fail" ]]; then echo 'fixture linker missing' >&2; exit 1; fi
+        mkdir -p "$target_dir/host/debug"
+        printf '#!/usr/bin/env bash\\necho rust-ready\\n' > "$target_dir/host/debug/devsetup_probe"
+        chmod +x "$target_dir/host/debug/devsetup_probe"
     elif [[ -f "$HOME/fail" ]]; then echo 'fixture linker missing' >&2; exit 1
     else
         printf '#!/usr/bin/env bash\\necho rust-ready\\n' > "${@: -1}"
@@ -498,9 +597,10 @@ esac
                 **os.environ, "TEST_HOME": str(root), "NO_COLOR": "1",
                 "REAL_CONFIG": str(ROOT / "src" / "config.sh"),
                 "DEVSETUP_CONFIG_FILE": str(root / "config.json"),
+                "FIXTURE_PYTHON": sys.executable,
             }
             env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
-            (root / "python3").write_text('#!/usr/bin/env bash\nexec python "$@"\n')
+            (root / "python3").write_text('#!/usr/bin/env bash\nexec "$FIXTURE_PYTHON" "$@"\n')
             bash_setup = """
 if command -v cygpath >/dev/null 2>&1; then
     export HOME="$(cygpath -u "$TEST_HOME")"
@@ -557,11 +657,32 @@ bash "$FIXTURE_SCRIPT" "$@"
             self.assertIn("native build/run failed", run())
             self.assertIn("preserved", run("--uninstall"))
             self.exercise_component_requests(root, run, "--audit")
+            self.exercise_cargo_support(root, run, "--audit")
             self.exercise_explicit_updates(root, run, {
                 "audit": "--audit", "upgrade": "--upgrade", "setup_upgrade": "--upgrade-rust",
                 "skip_check": "--skip-upgrade-check", "check_only": "--check-upgrades-only",
                 "uninstall": "--uninstall",
             })
+            if os.name != "nt":
+                config = json.loads((root / "config.json").read_text())
+                config["user"]["install"]["rust"] = True
+                config["user"]["rust"] = {"components": ["clippy"], "targets": []}
+                (root / "config.json").write_text(json.dumps(config))
+                proxy_bin = root / "homebrew" / "opt" / "rustup" / "bin"
+                proxy_bin.mkdir(parents=True)
+                (root / "rustup").rename(proxy_bin / "rustup")
+                (root / "rustup").symlink_to(proxy_bin / "rustup")
+                (proxy_bin / "cargo-clippy").write_text("#!/usr/bin/env bash\necho 'clippy fixture'\n")
+                (proxy_bin / "cargo-clippy").chmod(0o755)
+                (root / "brew").write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$HOME/homebrew"\n')
+                (root / "brew").chmod(0o755)
+                (root / "check-cargo-proxies").touch()
+                before = (root / ".profile").read_bytes()
+                self.assertIn("clippy fixture", run("--audit"))
+                self.assertEqual((root / ".profile").read_bytes(), before)
+                self.assertIn("added Rust tools", run())
+                self.assertIn(str(proxy_bin), (root / ".profile").read_text())
+                self.assertNotIn("[install]", run())
 
     def test_all_entrypoint_modes_are_wired(self):
         for name, installer in (("setup.ps1", "install-rust.ps1"), ("setup.sh", "install-rust.sh")):
@@ -583,12 +704,13 @@ bash "$FIXTURE_SCRIPT" "$@"
             readers.append("jq")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "python3").write_text('#!/usr/bin/env bash\nexec python "$@"\n')
+            (root / "python3").write_text('#!/usr/bin/env bash\nexec "$FIXTURE_PYTHON" "$@"\n')
             for reader in readers:
                 with self.subTest(reader=reader):
                     env = {
                         **os.environ, "TEST_HOME": str(root), "TEST_READER": reader,
                         "REAL_CONFIG": str(ROOT / "src" / "config.sh"),
+                        "FIXTURE_PYTHON": sys.executable,
                         "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""),
                     }
                     result = subprocess.run(

@@ -8,7 +8,7 @@ tool configuration or the existing setup/audit commands.
 
 Cross-platform developer environment setup for machines **without local admin rights**.
 
-Installs Git, GitHub CLI, Node.js, Prettier, Python, Rust, PHP, PowerShell, ShellCheck, ripgrep, Packer, and GPG
+Installs Git, GitHub CLI, Node.js, Prettier, Python, Rust/Cargo, Dioxus CLI (`dx`), PHP, PowerShell, ShellCheck, ripgrep, Packer, and GPG
 per-user, plus BusyBox on Windows, then applies VS Code settings and portable Copilot MCP defaults.
 VS Code profile settings can follow you through Settings Sync; Copilot's separate global MCP
 config is not covered by Settings Sync. Every step auto-detects what is already present and skips
@@ -36,6 +36,7 @@ Platform requirements:
   Prettier uses npm.
 
 No administrator or root access is required by the primary setup flow. WSL is never installed or invoked by `setup.ps1`.
+Dioxus CLI uses Cargo on all platforms and requires stable Rust and a working native linker.
 
 ### No-admin limitations
 
@@ -381,6 +382,8 @@ These are the supported knobs for routine use. They are safe to edit in a fork o
 | `user.install.node`                         | `true`                                                                                                                                                                               | Run the Node.js/npm step.                                                                                                                                                         |
 | `user.install.prettier`                     | `true`                                                                                                                                                                               | Run the Prettier CLI step. Uses user-level npm globals after Node.js/npm are available.                                                                                           |
 | `user.install.python`                       | `true`                                                                                                                                                                               | Run the Python step.                                                                                                                                                              |
+| `user.install.rust`                         | `true` | Provision stable Rust and Cargo, plus selected components and targets. |
+| `user.install.dioxus`                       | `true` | Install Dioxus CLI (`dx`) through Cargo after the Rust step. Existing installations are preserved. |
 | `user.install.php`                          | `true`                                                                                                                                                                               | Run the PHP step. macOS/Linux use Homebrew; Windows uses WinGet.                                                                                                                  |
 | `user.install.powershell`                   | `true`                                                                                                                                                                               | Run the PowerShell 7 step. macOS/Linux use Homebrew; Windows uses WinGet.                                                                                                         |
 | `user.install.shellcheck`                   | `true`                                                                                                                                                                               | Run the ShellCheck CLI step. macOS/Linux use Homebrew; Windows uses WinGet.                                                                                                       |
@@ -453,6 +456,8 @@ are not meant for day-to-day editing.
 | `advanced.prettier.npmPackageSpec`                                | `prettier@latest`                          | Package spec installed by npm.                                                                                              |
 | `advanced.prettier.windowsGlobalPrefix`                           | `%USERPROFILE%\.npm-global`                | User-owned npm global prefix on Windows.                                                                                    |
 | `advanced.prettier.unixGlobalPrefix`                              | `$HOME/.npm-global`                        | User-owned npm global prefix on macOS/Linux.                                                                                |
+| `advanced.dioxus.cargoPackage`                                    | `dioxus-cli` | Cargo package supplying `dx`. |
+| `advanced.dioxus.cratesApiBaseUrl`                                | `https://crates.io/api/v1/crates` | Read-only stable-version lookup for Dioxus upgrade checks. |
 | `advanced.php.homebrewFormula`                                    | `php`                                      | Formula used on macOS/Linux for PHP validation.                                                                             |
 | `advanced.php.wingetPackageId`                                    | `PHP.PHP`                                  | Package used on Windows for PHP validation.                                                                                 |
 | `advanced.powershell.homebrewFormula`                             | `powershell`                               | Formula used on macOS/Linux for the PowerShell extension.                                                                   |
@@ -496,7 +501,7 @@ The kit defaults Copilot edit auto-keep to one second. Set
 `chat.editing.autoAcceptDelay` under `user.vscode.settings`. Applying the kit updates
 an existing profile's delay to the configured value; unattended permissions remain opt-in.
 
-### Rust toolchain and editor
+### Rust, Cargo, and editor
 
 `user.install.rust` (default `true`) enables `src/scripts/install-rust.ps1` or
 `src/scripts/install-rust.sh` in setup, audit, and upgrade-check modes.
@@ -509,7 +514,10 @@ Existing rustup installations and `CARGO_HOME` are detected even when Cargo is n
 Setup resolves rustup's configured default host and provisions that host's **stable**,
 with `rustfmt`, `clippy`, and `rust-src` by default, checks `rustc` and Cargo,
 and preserves an existing default toolchain and repository toolchain pins.
-Missing components are repaired; existing toolchains are not automatically upgraded.
+Cargo and `rustc` are required components and are repaired when missing, even when
+`user.rust.components` is empty. Cargo is bundled with Rust; it needs no separate
+installer or `user.install.cargo` switch. `user.install.rust` controls both.
+Other missing selected components are repaired; existing toolchains are not automatically upgraded.
 `user.rust.components` is a deduplicated array of rustup component names; `user.rust.targets`
 is an optional array of cross-compilation targets, empty by default. For example:
 
@@ -562,7 +570,10 @@ project-pinned toolchains is disabled during inspection. Framework crates such a
 Axum, Bevy, and Tauri remain project dependencies managed by the project's Cargo manifests,
 not global rustup components or silently installed CLI tools.
 
-A normal run compiles, links, and executes a tiny temporary native program, then removes it.
+A normal run builds a dependency-free temporary Cargo project with `cargo build --offline`,
+then executes the native program and removes the entire temporary workspace.
+The probe uses the configured host, a private target directory, and its own working directory;
+it does not fetch crates or modify the current project's manifest, lockfile, or build outputs.
 Audit never compiles or changes PATH; it reports planned PATH/profile changes and
 explicitly reports build readiness as unverified.
 A successful version check alone is not proof that Windows linking works.
@@ -572,6 +583,9 @@ Command Line Tools. Setup never elevates, installs these system prerequisites, c
 host target, or writes a global linker workaround. Shared Rust installations and Cargo
 packages are intentionally preserved by uninstall on both platforms.
 Open a new terminal/login shell manually to pick up PATH changes.
+Cargo-installed commands use `CARGO_HOME/bin`; Homebrew's Rust proxy directory is also
+included when needed so commands such as `cargo clippy` work before opening a new shell.
+This discovery is scoped to Rust subprocesses during audit and does not change persistent PATH.
 
 The editor baseline installs official `rust-lang.rust-analyzer`, uses Clippy for checks,
 and scopes rust-analyzer formatting/format-on-save to `[rust]`. Existing additional
@@ -583,6 +597,49 @@ in VS Code, turn on Settings Sync, sign in with GitHub, and include **Settings**
 **Extensions**. Confirm the Rust entries with **Settings Sync: Show Synced Data**.
 Local configuration or an accepted `--sync on` request is not proof of completed cloud
 upload. Toolchains, Cargo caches, native SDKs, and machine PATH do **not** sync.
+
+### Dioxus CLI (`dx`)
+
+`user.install.dioxus` (default `true`) runs `src/scripts/install-dioxus.sh` or
+`src/scripts/install-dioxus.ps1` after the Rust step on macOS, Linux, and Windows.
+It uses the [official Dioxus Cargo package](https://dioxuslabs.com/learn/0.7/getting_started/#install-the-dioxus-cli):
+`cargo install --locked --bin dx --root <Cargo home> dioxus-cli`.
+The explicit root respects `CARGO_HOME` (default `~/.cargo` or `%USERPROFILE%\.cargo`)
+and prevents `CARGO_INSTALL_ROOT` from redirecting the installation elsewhere.
+The stable toolchain is selected only for the install subprocess; existing defaults,
+repository pins, and the caller's toolchain environment are preserved.
+
+This source build can take several minutes and needs a working native compiler/linker
+and platform dependencies such as OpenSSL where applicable. Unlike the prebuilt
+installer recommended by Dioxus for speed, this uses the kit's existing Cargo support
+without running a downloaded shell script or installing `cargo-binstall`.
+The kit never installs system SDKs or elevates to satisfy these dependencies.
+WebAssembly targets, WebView2, Linux WebKitGTK, and mobile SDKs remain project/platform
+prerequisites; installing `dx` does not prove a particular app target can build.
+
+Existing `dx` commands are version-checked and skipped, including those under a custom
+Cargo home that is not yet on PATH. The Cargo bin directory is exposed for future
+terminals using the same Rust PATH helpers. Open a new terminal manually when ready.
+Set `user.install.dioxus` to `false` to disable this step. If Rust setup is disabled,
+provide stable Rust/Cargo separately before installing a missing CLI.
+
+```bash
+bash ./src/scripts/install-dioxus.sh --audit
+bash ./src/scripts/install-dioxus.sh
+```
+
+```powershell
+.\src\scripts\install-dioxus.ps1 -Audit
+.\src\scripts\install-dioxus.ps1
+```
+
+Audit and upgrade-check modes never install or compile. Installed/latest stable
+versions are compared through the crates.io HTTP API, not a mutating Cargo registry
+command; lookup failures are explicit errors. Updates are reported, never applied
+automatically. Projects needing a particular CLI release can install it explicitly
+with `cargo install dioxus-cli --locked --version <version>`; setup accepts an existing CLI.
+Uninstall preserves Cargo packages and reports the manual `cargo uninstall` command,
+without removing Rust toolchains, caches, or project dependencies.
 
 ### Extensions
 
@@ -1019,6 +1076,8 @@ path is machine-local and explicitly excluded from Settings Sync.
 macOS/Linux use Homebrew and Windows uses WinGet to install PowerShell 7 when it is missing. The
 resolved `pwsh` path is written to `powershell.powerShellAdditionalExePaths`, restoring discovery
 for the VS Code PowerShell extension. The path is machine-local and excluded from Settings Sync.
+Ordinary setup, audit, and explicit-upgrade runs support macOS's stock Bash 3.2;
+installing a newer Bash is not required.
 
 PowerShell detection reads the installed executable's version, not the version of the shell
 running setup. Upgrade checks query the official latest stable release and compare numeric

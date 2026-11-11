@@ -35,6 +35,7 @@ if [[ $uninstall -eq 1 ]]; then
 fi
 
 component_list="$(devsetup_config_list user.rust.components $'rustfmt\nclippy\nrust-src')"
+component_list="$(printf '%s\n' cargo rustc "$component_list" | awk 'NF && !seen[$0]++')"
 target_list="$(devsetup_config_list user.rust.targets)"
 while IFS= read -r name; do
 	[[ -n "$name" ]] || continue
@@ -54,14 +55,7 @@ selection="components [${component_list//$'\n'/, }], targets [${target_list//$'\
 formula="$(devsetup_config advanced.rust.homebrewFormula rustup)"
 cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
 devsetup_status found "Rust homes" "Cargo: ${CARGO_HOME:-$HOME/.cargo}; rustup: ${RUSTUP_HOME:-$HOME/.rustup} (current-user permissions; no elevation requested)"
-rustup="$(command -v rustup || true)"
-if [[ -z "$rustup" && -x "$cargo_bin/rustup" ]]; then rustup="$cargo_bin/rustup"; fi
-brew_path="$(devsetup_homebrew_path || true)"
-rustup_bin=""
-if [[ -n "$brew_path" ]]; then
-	rustup_bin="$("$brew_path" --prefix)/opt/$formula/bin"
-	if [[ -z "$rustup" && -x "$rustup_bin/rustup" ]]; then rustup="$rustup_bin/rustup"; fi
-fi
+rustup="$(devsetup_rust_tool_path rustup || true)"
 if [[ -z "$rustup" ]]; then
 	if [[ $audit -eq 1 ]]; then
 		devsetup_status install Rust "would install $formula via Homebrew and stable with $selection"
@@ -76,8 +70,9 @@ if [[ -z "$rustup" ]]; then
 	rustup="$(command -v rustup)"
 fi
 
+rustup_dir="$(dirname "$rustup")"
 invoke_rustup() {
-	RUSTUP_AUTO_INSTALL=0 "$rustup" "$@"
+	PATH="$rustup_dir:$cargo_bin:$PATH" RUSTUP_AUTO_INSTALL=0 "$rustup" "$@"
 }
 
 rust_has_entry() {
@@ -90,15 +85,7 @@ rust_has_entry() {
 
 version="$(invoke_rustup --version)"
 devsetup_status found rustup "$version"
-rustup_dir="$(dirname "$rustup")"
-profile="$HOME/.profile"
-if [[ "$(uname -s)" == "Darwin" ]]; then profile="$HOME/.zprofile"; fi
-printf -v path_line "export PATH=%q:%q:\"\$PATH\"" "$rustup_dir" "$cargo_bin"
-needs_path=1
-if [[ -f "$profile" ]] && grep -Fqx "$path_line" "$profile"; then needs_path=0; fi
-if [[ $audit -eq 1 && $needs_path -eq 1 ]]; then
-	devsetup_status install "Rust PATH" "would add Rust tools to $profile (new login shells)"
-fi
+if [[ $audit -eq 1 ]]; then devsetup_persist_rust_path "$rustup_dir" 1; fi
 host_info="$(invoke_rustup show)"
 default_host="$(printf '%s\n' "$host_info" | sed -n 's/^Default host: //p')"
 if [[ -z "$default_host" || "$default_host" == *[[:space:]]* ]]; then
@@ -207,14 +194,17 @@ if [[ -n "$target_list" ]]; then
 	done <<< "$target_list"
 fi
 for tool in rustc cargo; do
-	version="$(invoke_rustup run "$stable_toolchain" "$tool" --version)"
-	devsetup_status found "Rust $tool" "$version"
+	if rust_has_entry "$installed" "$tool" 1; then
+		version="$(invoke_rustup run "$stable_toolchain" "$tool" --version)"
+		devsetup_status found "Rust $tool" "$version"
+	fi
 done
 if rust_has_entry "$component_list" rustfmt 1 && rust_has_entry "$installed" rustfmt 1; then
 	version="$(invoke_rustup run "$stable_toolchain" rustfmt --version)"
 	devsetup_status found "Rust rustfmt version" "$version"
 fi
-if rust_has_entry "$component_list" clippy 1 && rust_has_entry "$installed" clippy 1; then
+if rust_has_entry "$component_list" clippy 1 && rust_has_entry "$installed" clippy 1 &&
+	rust_has_entry "$installed" cargo 1; then
 	version="$(invoke_rustup run "$stable_toolchain" cargo clippy --version)"
 	devsetup_status found "Rust clippy version" "$version"
 fi
@@ -239,17 +229,26 @@ if [[ $audit -eq 1 ]]; then
 fi
 
 export PATH="$rustup_dir:$cargo_bin:$PATH"
-if [[ $needs_path -eq 1 ]]; then
-	if [[ -f "$profile" ]]; then cp "$profile" "$profile.devsetup-backup-$(date -u +%Y%m%d%H%M%S)"; fi
-	printf '\n# Added by bos-devsetup-kit for Rust.\n%s\n' "$path_line" >> "$profile"
-	devsetup_status install "Rust PATH" "added Rust tools to $profile (new login shells)"
-fi
+devsetup_persist_rust_path "$rustup_dir"
 probe="$(mktemp -d)"
-trap 'rm -f "$probe/probe.rs" "$probe/probe"; rmdir "$probe"' EXIT
+trap 'rm -rf -- "$probe"' EXIT
+cat > "$probe/Cargo.toml" <<'EOF'
+[package]
+name = "devsetup_probe"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "devsetup_probe"
+path = "probe.rs"
+EOF
 printf '%s\n' 'fn main() { println!("rust-ready"); }' > "$probe/probe.rs"
-if invoke_rustup run "$stable_toolchain" rustc --edition 2021 --crate-name devsetup_probe "$probe/probe.rs" -o "$probe/probe" &&
-	output="$("$probe/probe")" && [[ "$output" == "rust-ready" ]]; then
-	devsetup_status found "Rust build" "stable compiled, linked, and ran a native executable"
+if (cd "$probe" && invoke_rustup run "$stable_toolchain" cargo build --offline --quiet --target "$default_host" \
+	--manifest-path "$probe/Cargo.toml" --target-dir "$probe/target") &&
+	output="$("$probe/target/$default_host/debug/devsetup_probe")" && [[ "$output" == "rust-ready" ]]; then
+	devsetup_status found "Rust build" "Cargo compiled, linked, and ran a native executable with stable"
 else
-	devsetup_status warn "Rust build" "toolchain installed but native build/run failed; install the platform C linker/SDK (Xcode Command Line Tools on macOS). No sudo or global linker override was attempted."
+	devsetup_status warn "Rust build" "toolchain installed but Cargo native build/run failed; check Cargo configuration and the platform C linker/SDK (Xcode Command Line Tools on macOS). No sudo or global linker override was attempted."
 fi

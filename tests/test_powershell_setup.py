@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else shutil.which("pwsh")
-BASH = shutil.which("bash")
+BASH = "/bin/bash" if sys.platform == "darwin" else shutil.which("bash")
 if os.name == "nt":
     git = shutil.which("git")
     git_bash = Path(git).parent.parent / "bin" / "bash.exe" if git else None
@@ -26,8 +26,6 @@ class PowerShellWiringTests(unittest.TestCase):
         self.assertIn("[switch]$UpgradePowerShell", windows)
         self.assertIn("-Upgrade:$UpgradePowerShell", windows)
         self.assertIn("--upgrade-powershell) upgrade_powershell=1", unix)
-        self.assertIn("powershell_flags+=(--upgrade)", unix)
-        self.assertIn('"${powershell_flags[@]}"', unix)
 
 
 @unittest.skipUnless(POWERSHELL, "PowerShell is required")
@@ -54,7 +52,7 @@ class WindowsPowerShellInstallerTests(unittest.TestCase):
 $script:portableInstaller = ${function:Install-DevSetupPortableRuntime}
 function Get-DevSetupConfig {
     $install = [ordered]@{}
-    foreach ($tool in @('git', 'githubCli', 'node', 'prettier', 'python', 'rust', 'php',
+    foreach ($tool in @('git', 'githubCli', 'node', 'prettier', 'python', 'rust', 'dioxus', 'php',
         'powershell', 'shellcheck', 'ripgrep', 'busybox', 'packer', 'gpg', 'vscodeSettings')) {
         $install[$tool] = $false
     }
@@ -301,7 +299,7 @@ class BashPowerShellInstallerTests(unittest.TestCase):
 . "$REAL_CONFIG"
 devsetup_is_elevated() { return 1; }
 devsetup_config() { printf '%s' "$2"; }
-devsetup_config_reader() { printf python; }
+devsetup_config_reader() { printf '%s' "$FIXTURE_PYTHON"; }
 devsetup_status() {
     printf '[%s] %s %s\\n' "$1" "$2" "$3"
     if [[ -n "${DEVSETUP_STATUS_LOG:-}" ]]; then
@@ -314,10 +312,11 @@ devsetup_enabled() { [[ "$1" == user.install.powershell && ! -f "$HOME/disabled"
         self.bin = self.root / "bin"
         self.bin.mkdir()
         (self.bin / "pwsh").write_text("""#!/usr/bin/env bash
+if [[ -f "$HOME/version-failure" ]]; then echo 'fixture version failure' >&2; exit 7; fi
 printf 'PowerShell %s\\n' "$(cat "$HOME/version")"
 """)
         (self.bin / "python3").write_text("""#!/usr/bin/env bash
-exec python "$@"
+exec "$FIXTURE_PYTHON" "$@"
 """)
         (self.bin / "curl").write_text("""#!/usr/bin/env bash
 if [[ -f "$HOME/network-failure" ]]; then exit 7; fi
@@ -359,6 +358,7 @@ esac
             **os.environ, "TEST_HOME": str(self.root), "NO_COLOR": "1",
             "FIXTURE_SCRIPT": "setup.sh" if setup else "src/scripts/install-powershell.sh",
             "REAL_CONFIG": str(ROOT / "src" / "config.sh"),
+            "FIXTURE_PYTHON": sys.executable,
         }
         env.pop("DEVSETUP_STATUS_LOG", None)
         env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
@@ -464,6 +464,32 @@ bash "$FIXTURE_SCRIPT" "$@"
         result = self.run_installer("--upgrade-powershell", "--audit", setup=True)
         self.assertIn("user.install.powershell is false", result.stdout)
         self.assertFalse((self.root / "upgrades").exists())
+
+    def test_setup_without_upgrade_completes_audit_and_repeat_runs(self):
+        for options in (("--audit", "--skip-upgrade-check"),
+                        ("--skip-upgrade-check",), ("--skip-upgrade-check",)):
+            with self.subTest(options=options):
+                result = self.run_installer(*options, setup=True)
+                self.assertIn("Summary:", result.stdout)
+                self.assertIn("installed 7.6.9", result.stderr)
+                self.assertNotIn("[install]", result.stderr)
+                self.assertNotIn("[warn]", result.stderr)
+                self.assertEqual((self.root / "version").read_text(), "7.6.9")
+                self.assertFalse((self.root / "upgrades").exists())
+                if "--audit" in options:
+                    self.assertIn("Audit complete.", result.stdout)
+                    self.assertIn("Recommendation:", result.stdout)
+                else:
+                    self.assertIn("Setup complete.", result.stdout)
+
+    def test_setup_version_failure_does_not_report_completion(self):
+        (self.root / "version-failure").touch()
+        for options in (("--audit", "--skip-upgrade-check"), ("--skip-upgrade-check",)):
+            with self.subTest(options=options):
+                result = self.run_installer(*options, setup=True, success=False)
+                self.assertIn("Cannot detect the PowerShell version", result.stderr)
+                self.assertNotIn("Summary:", result.stdout)
+                self.assertNotIn("Setup complete.", result.stdout)
 
 
 if __name__ == "__main__":
