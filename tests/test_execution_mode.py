@@ -120,6 +120,22 @@ class PowerShellExecutionModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout
 
+    def test_audit_summary_distinguishes_warnings_and_removals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+. 'REAL_MODULE'
+$log = Join-Path $env:FIXTURE 'status.log'
+Set-Content $log 'warn|Fixture|blocked'
+Write-DevSetupSummary -LogPath $log -Audit
+Set-Content $log 'remove|Fixture|would uninstall fixture'
+Write-DevSetupSummary -LogPath $log -Audit -ApplyCommand '.\setup.ps1 -Uninstall'
+""")
+            self.assertNotIn("No further action is required", output)
+            self.assertNotIn("environment already matches", output)
+            self.assertIn("1 would remove", output)
+            self.assertIn("[remove] Fixture: would uninstall fixture", output)
+            self.assertIn(r"APPLY: .\setup.ps1 -Uninstall", output)
+
     def test_standard_elevated_audit_admin_and_invalid_mode_matrix(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = self.run_harness(Path(temporary), r"""
@@ -296,6 +312,20 @@ echo 'PASS: execution-mode matrix'
 """)
             self.assertIn("PASS: execution-mode matrix", output)
 
+    def test_audit_summary_distinguishes_warnings_and_removals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+. "$REAL_CONFIG"
+printf 'warn|Fixture|blocked\n' > "$HOME/status"
+devsetup_summary "$HOME/status" 1
+printf 'remove|Fixture|would uninstall fixture\n' > "$HOME/status"
+devsetup_summary "$HOME/status" 1 './setup.sh --uninstall'
+""")
+            self.assertNotIn("environment already matches", output)
+            self.assertIn("1 would remove", output)
+            self.assertIn("Fixture: would uninstall fixture", output)
+            self.assertIn("Run this to apply them: ./setup.sh --uninstall", output)
+
     def test_every_unix_application_rejects_root_before_tool_configuration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -360,6 +390,7 @@ devsetup_activate_homebrew() { return 0; }
 fixture_prefix="$(dirname "$HOME")"
 brew() { [[ "$*" == --prefix ]]; printf '%s\n' "$fixture_prefix"; }
 if devsetup_audit_homebrew_install Fixture fixture; then exit 1; fi
+devsetup_uninstall_via_homebrew Fixture fixture 1
 export DEVSETUP_ADMIN_MODE=1
 devsetup_audit_homebrew_install Fixture fixture
 fixture_prefix="$HOME/.linuxbrew"
@@ -370,6 +401,7 @@ echo 'PASS: audit reflects prefix policy'
 """)
             self.assertIn("[warn]", output)
             self.assertIn("cannot install 'fixture': refusing to modify shared prefix", output)
+            self.assertIn("cannot uninstall 'fixture': refusing to modify shared prefix", output)
             self.assertEqual(output.count("would install 'fixture'"), 2)
             self.assertIn("PASS: audit reflects prefix policy", output)
 

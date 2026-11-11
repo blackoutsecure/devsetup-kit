@@ -453,7 +453,7 @@ bash "$FIXTURE_SCRIPT" "$@"
         result = self.run_installer("--upgrade-powershell", "--audit",
                                     "--skip-upgrade-check", setup=True)
         self.assertIn("would upgrade", result.stderr)
-        self.assertIn("Run this to apply them: ./setup.sh --upgrade-powershell", result.stdout)
+        self.assertIn("Run this to apply them: ./setup.sh --skip-upgrade-check --upgrade-powershell", result.stdout)
         self.assertFalse((self.root / "upgrades").exists())
         result = self.run_installer("--upgrade-powershell", "--check-upgrades-only",
                                     "--audit", setup=True)

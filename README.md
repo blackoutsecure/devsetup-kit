@@ -339,8 +339,9 @@ The same vocabulary is used during a real run:
 | `[remove]`  | Uninstalled. Only ever appears with `-Uninstall` / `--uninstall`.                                            |
 
 Every run ends with a one-line `Summary:` tally of these tags. `-Audit` runs add a
-`Recommendation:` section: if anything is pending, it lists each planned change and the exact
-command to apply it (`.\setup.ps1` / `./setup.sh`); if nothing is pending, it says so instead.
+`Recommendation:` section: if anything is pending, it lists planned changes and the command to
+apply them; earlier failures can prevent later steps. On Unix, the command preserves a
+`DEVSETUP_CONFIG_FILE` override. Warnings are reported separately even when no changes are planned.
 
 ## Layout
 

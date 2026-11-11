@@ -418,12 +418,16 @@ devsetup_check_homebrew_upgrade() {
 
 # Removes a Homebrew-managed formula. Only ever called when --uninstall is passed explicitly.
 devsetup_uninstall_via_homebrew() {
-	local component="$1" formula="$2" audit="${3:-0}"
+	local component="$1" formula="$2" audit="${3:-0}" problem
 	if ! devsetup_activate_homebrew; then
 		devsetup_status warn "$component" "Homebrew is unavailable; cannot uninstall"
 		return 1
 	fi
 	if [[ "$audit" -eq 1 ]]; then
+		if ! problem="$(devsetup_homebrew_write_problem 2>&1)"; then
+			devsetup_status warn "$component" "cannot uninstall '$formula': $problem"
+			return 0
+		fi
 		devsetup_status remove "$component" "would uninstall '$formula' via Homebrew"
 		return 0
 	fi
@@ -484,7 +488,7 @@ devsetup_status() {
 devsetup_summary() {
 	local log_path="${1:-}" audit="${2:-0}" found=0 install=0 skip=0 warn=0 update=0 remove=0
 	local apply_command="${3:-./setup.sh}"
-	local warn_label install_label summary_line update_label
+	local warn_label install_label remove_label summary_line update_label changes
 	if [[ -n "$log_path" && -f "$log_path" ]]; then
 		found="$(grep -c '^found|' "$log_path" || true)"
 		install="$(grep -c '^install|' "$log_path" || true)"
@@ -505,17 +509,20 @@ devsetup_summary() {
 		summary_line="$summary_line, $update $update_label available"
 	fi
 	if [[ "$remove" -gt 0 ]]; then
-		summary_line="$summary_line, $remove removed"
+		remove_label="removed"
+		[[ "$audit" -eq 1 ]] && remove_label="would remove"
+		summary_line="$summary_line, $remove $remove_label"
 	fi
 	echo "$summary_line"
 
 	if [[ "$audit" -eq 1 ]]; then
 		echo
-		if [[ "$install" -eq 0 ]]; then
-			echo "Recommendation: no changes needed, environment already matches config/dev-setup.config.json. No need to run without --audit."
+		changes=$((install + remove))
+		if [[ "$changes" -eq 0 ]]; then
+			echo "Recommendation: no changes are proposed by this audit."
 		else
-			echo "Recommendation: $install change(s) would be made if you run the real setup:"
-			grep '^install|' "$log_path" | while IFS='|' read -r _ component detail; do
+			echo "Recommendation: $changes change(s) planned (subject to earlier steps succeeding):"
+			grep -E '^(install|remove)\|' "$log_path" | while IFS='|' read -r _ component detail; do
 				echo "  - ${component}: ${detail}"
 			done
 			echo "Run this to apply them: $apply_command"

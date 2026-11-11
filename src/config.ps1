@@ -186,10 +186,10 @@ function Write-DevSetupSummary {
             $state = $parts[0]
             if (-not $counts.Contains($state)) { continue }
             $counts[$state]++
-            if ($Audit -and $state -eq "install") {
+            if ($Audit -and ($state -eq "install" -or $state -eq "remove")) {
                 $component = if ($parts.Count -gt 1) { $parts[1] } else { "" }
                 $detail = if ($parts.Count -gt 2) { $parts[2] } else { "" }
-                $pending += "$component`: $detail"
+                $pending += [pscustomobject]@{ State = $state; Detail = "$component`: $detail" }
             }
         }
     }
@@ -198,7 +198,10 @@ function Write-DevSetupSummary {
     $warnLabel = if ($counts.warn -eq 1) { "warning" } else { "warnings" }
     $summaryLine = "Summary: $($counts.found) found, $($counts.install) $installLabel, $($counts.skip) skipped, $($counts.warn) $warnLabel"
     if ($counts.update -gt 0) { $summaryLine += ", $($counts.update) update$(if ($counts.update -ne 1) { 's' }) available" }
-    if ($counts.remove -gt 0) { $summaryLine += ", $($counts.remove) removed" }
+    if ($counts.remove -gt 0) {
+        $removeLabel = if ($Audit) { "would remove" } else { "removed" }
+        $summaryLine += ", $($counts.remove) $removeLabel"
+    }
     Write-Host ""
     Write-Host $summaryLine
 
@@ -235,15 +238,13 @@ function Write-DevSetupSummary {
         Write-Host ("=" * 78) -ForegroundColor DarkCyan
         Write-Host ""
         if ($pending.Count -eq 0) {
-            Write-Host "  STATUS: No changes needed." -ForegroundColor Green
-            Write-Host "  The environment already matches config/dev-setup.config.json."
-            Write-Host "  No further action is required."
+            Write-Host "  STATUS: No changes are proposed by this audit." -ForegroundColor Green
         } else {
             Write-Host "  STATUS: $($pending.Count) change(s) pending." -ForegroundColor Yellow
-            Write-Host "  The following actions would run without -Audit:"
+            Write-Host "  The following actions are planned, subject to earlier steps succeeding:"
             for ($index = 0; $index -lt $pending.Count; $index++) {
-                Write-Host ("    {0}. [install]" -f ($index + 1)) -ForegroundColor Cyan -NoNewline
-                Write-Host (" {0}" -f $pending[$index])
+                Write-Host ("    {0}. [{1}]" -f ($index + 1), $pending[$index].State) -ForegroundColor Cyan -NoNewline
+                Write-Host (" {0}" -f $pending[$index].Detail)
             }
             Write-Host ""
             Write-Host "  APPLY: $ApplyCommand" -ForegroundColor Cyan

@@ -185,7 +185,7 @@ if ($Uninstall) {
     } else {
         Write-Host "Uninstall complete."
     }
-    Write-DevSetupSummary -LogPath $statusLog -Audit:$Audit
+    Write-DevSetupSummary -LogPath $statusLog -Audit:$Audit -ApplyCommand ".\setup.ps1 -Uninstall"
     Remove-Item $statusLog -ErrorAction SilentlyContinue
     Remove-Item Env:\DEVSETUP_STATUS_LOG -ErrorAction SilentlyContinue
     return
