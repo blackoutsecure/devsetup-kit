@@ -164,6 +164,48 @@ chmod +x "$HOME/.npm-global/bin/prettier"
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((self.root / "installed").exists())
 
+    def test_git_helper_uses_exec_path_and_preserves_existing_configuration(self):
+        kit = self.root / "kit"
+        scripts = kit / "src" / "scripts"
+        scripts.mkdir(parents=True)
+        shutil.copyfile(ROOT / "src/scripts/install-portable-git.sh", scripts / "install-portable-git.sh")
+        (kit / "src/config.sh").write_text(
+            f'. "{ROOT / "src/config.sh"}"\n'
+            "devsetup_is_elevated() { return 1; }\n"
+        )
+        exec_dir = self.root / "git-exec"
+        exec_dir.mkdir()
+        (exec_dir / "git-credential-manager").write_text("#!/bin/sh\nexit 0\n")
+        (exec_dir / "git-credential-manager").chmod(0o755)
+        self.executable("uname", "echo Linux\n")
+        self.env["REAL_GIT"] = shutil.which("git")
+        self.env["GIT_CONFIG_NOSYSTEM"] = "1"
+        self.env["GIT_CONFIG_GLOBAL"] = str(self.root / "gitconfig")
+        self.executable("git", r"""
+if [[ "$*" == --exec-path ]]; then printf '%s/git-exec\n' "$HOME"; exit; fi
+exec "$REAL_GIT" "$@"
+""")
+        script = scripts / "install-portable-git.sh"
+        audit = self.run_script(script, "--audit")
+        self.assertEqual(audit.returncode, 0, audit.stdout + audit.stderr)
+        self.assertIn("would set credential helper to 'manager'", audit.stdout)
+        self.assertFalse((self.root / "gitconfig").exists())
+        applied = self.run_script(script)
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        self.assertIn("credential helper set to 'manager'", applied.stdout)
+        second = self.run_script(script)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn("credential helper 'manager' already configured", second.stdout)
+        subprocess.run(
+            [self.env["REAL_GIT"], "config", "--global", "credential.helper", "other"],
+            env=self.env, check=True, timeout=30,
+        )
+        before = (self.root / "gitconfig").read_bytes()
+        preserved = self.run_script(script)
+        self.assertEqual(preserved.returncode, 0, preserved.stdout + preserved.stderr)
+        self.assertIn("existing credential helper preserved", preserved.stdout)
+        self.assertEqual((self.root / "gitconfig").read_bytes(), before)
+
     def test_parent_activates_new_homebrew_and_uninstalls_prettier_first(self):
         kit = self.root / "kit"
         scripts = kit / "src" / "scripts"

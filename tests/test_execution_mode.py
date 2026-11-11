@@ -350,6 +350,29 @@ echo 'PASS: shared prefix opt-in and root protection'
 """)
             self.assertIn("PASS: shared prefix opt-in and root protection", output)
 
+    def test_homebrew_audit_reports_shared_prefix_blockers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+. "$REAL_CONFIG"
+devsetup_is_elevated() { return 1; }
+devsetup_homebrew_path() { printf '%s\n' "$HOME/bin/brew"; }
+devsetup_activate_homebrew() { return 0; }
+fixture_prefix="$(dirname "$HOME")"
+brew() { [[ "$*" == --prefix ]]; printf '%s\n' "$fixture_prefix"; }
+if devsetup_audit_homebrew_install Fixture fixture; then exit 1; fi
+export DEVSETUP_ADMIN_MODE=1
+devsetup_audit_homebrew_install Fixture fixture
+fixture_prefix="$HOME/.linuxbrew"
+mkdir -p "$fixture_prefix"
+export DEVSETUP_ADMIN_MODE=0
+devsetup_audit_homebrew_install Fixture fixture
+echo 'PASS: audit reflects prefix policy'
+""")
+            self.assertIn("[warn]", output)
+            self.assertIn("cannot install 'fixture': refusing to modify shared prefix", output)
+            self.assertEqual(output.count("would install 'fixture'"), 2)
+            self.assertIn("PASS: audit reflects prefix policy", output)
+
     def test_homebrew_audit_apply_second_run_and_formula_only_install(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
