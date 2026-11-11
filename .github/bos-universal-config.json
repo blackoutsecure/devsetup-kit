@@ -1,0 +1,43 @@
+{
+    "managed_file_sync": {
+        "mode": "commit",
+        "services": [
+            "common",
+            "lf_line_endings",
+            "editorconfig",
+            "markdownlint",
+            "yamllint",
+            "shellcheck",
+            "python_ecosystem"
+        ],
+        "disabled_services": ["dependabot_actions", "dependabot_pip"]
+    },
+    "organization": {
+        "runners": {
+            "default": "ubuntu-latest",
+            "x64": "ubuntu-latest",
+            "arm64": "ubuntu-24.04-arm"
+        },
+        "reporting": {
+            "enable_job_summary": true,
+            "enable_annotations": true,
+            "title_prefix": "Blackout Secure",
+            "fail_on": "fail"
+        },
+        "defaults": {
+            "timeout_minutes": 30
+        }
+    },
+    "gate": {
+        "node_lint_mode": "auto",
+        "python_lint_mode": "auto",
+        "shell_lint_mode": "auto"
+    },
+    "remediation": {
+        "mode": "notify",
+        "min_confidence": "high",
+        "allow_workflow_changes": false,
+        "allow_security_control_changes": false,
+        "allow_auto_merge": false
+    }
+}

@@ -18,8 +18,27 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 . "$script_dir/../config.sh"
 
 audit=0
-if [[ "${1:-}" == "--audit" ]]; then
-	audit=1
+print_path=0
+uninstall=0
+check_upgrades=0
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--audit) audit=1 ;;
+		--print-path) print_path=1 ;;
+		--uninstall) uninstall=1 ;;
+		--check-upgrades) check_upgrades=1 ;;
+		*) echo "Unknown option: $1" >&2; exit 2 ;;
+	esac
+	shift
+done
+
+devsetup_assert_execution_mode "$audit"
+
+if [[ $uninstall -eq 1 ]]; then
+	# Uninstall would also need to unwind global credential/identity config this
+	# script wrote, which isn't safe to automate. Leave Git out of --uninstall.
+	devsetup_status warn Git "uninstall is not supported; remove it via your OS package manager manually if needed"
+	exit 0
 fi
 
 os="$(uname -s)"
@@ -32,6 +51,12 @@ else
 	git_present=0
 fi
 
+# Only the Linux/Homebrew-managed install is ours to report on; macOS's git comes
+# from Xcode Command Line Tools and is left to Apple's own update mechanism.
+if [[ $check_upgrades -eq 1 && $git_present -eq 1 && "$os" == "Linux" ]]; then
+	devsetup_check_homebrew_upgrade Git "$formula"
+fi
+
 if [[ $audit -eq 1 ]]; then
 	if [[ $git_present -eq 0 ]]; then
 		case "$os" in
@@ -39,8 +64,10 @@ if [[ $audit -eq 1 ]]; then
 			Linux)  devsetup_status install Git "would install '$formula' via Homebrew" ;;
 		esac
 	fi
-	user_email="$(devsetup_config user.git.userEmail "")"
 	devsetup_git_identity_status 1
+	if [[ $print_path -eq 1 && $git_present -eq 1 ]]; then
+		command -v git
+	fi
 	exit 0
 fi
 
@@ -55,14 +82,12 @@ if [[ $git_present -eq 0 ]]; then
 			exit 1
 			;;
 		Linux)
-			devsetup_status install Git "installing '$formula' via Homebrew"
-			if ! command -v brew >/dev/null 2>&1; then
-				brew_install_url="$(devsetup_config advanced.git.homebrewInstallUrl https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-				brew_shellenv="$(devsetup_config advanced.git.linuxbrewShellenv /home/linuxbrew/.linuxbrew/bin/brew)"
-				NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$brew_install_url")"
-				eval "$("$brew_shellenv" shellenv)"
+			devsetup_status install Git "installing '$formula' via Homebrew (live output below, may take a few minutes)"
+			if ! devsetup_ensure_homebrew; then
+				printf 'Git is unavailable and Homebrew could not be installed.\n' >&2
+				exit 1
 			fi
-			brew install "$formula"
+			NONINTERACTIVE=1 brew install --formula "$formula" < /dev/null
 			devsetup_status found Git "$(git --version) at $(command -v git)"
 			;;
 		*)
@@ -96,3 +121,7 @@ if [[ -n "$user_email" ]]; then
 	git config --global user.email "$user_email"
 fi
 devsetup_git_identity_status
+
+if [[ $print_path -eq 1 ]]; then
+	command -v git
+fi

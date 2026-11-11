@@ -13,12 +13,23 @@ param(
     [string]$InstallDir,
     [switch]$ConfigureVSCode,
     [switch]$ForcePortable,
-    [switch]$Audit
+    [switch]$PrintPath,
+    [switch]$Audit,
+    [switch]$Uninstall,
+    [switch]$CheckUpgrades
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "..\config.ps1")
+Assert-DevSetupExecutionMode -ReadOnly:$Audit
 $config = Get-DevSetupConfig
+
+if ($Uninstall) {
+    # PortableGit uninstall would also need to unwind global credential/identity config
+    # this script wrote, which isn't safe to automate. Leave Git out of -Uninstall.
+    Write-DevSetupStatus warn "Git" "uninstall is not supported; remove the PortableGit folder manually if needed"
+    return
+}
 
 if (-not $InstallDir) {
     $InstallDir = Expand-DevSetupPath (Get-DevSetupValue $config "user.git.installDir" (
@@ -40,6 +51,20 @@ if ($pathGit) {
 }
 
 $needsInstall = (-not (Test-Path $portableGitExe)) -and ($ForcePortable -or -not $pathGit)
+
+if ($CheckUpgrades -and -not $pathGit -and (Test-Path $portableGitExe)) {
+    # Only PortableGit is managed by this script; a system git on PATH is left alone.
+    try {
+        $latestRelease = Invoke-RestMethod -Uri $releaseApiUrl -Headers @{ "User-Agent" = "portable-git-setup" }
+        $latestVersion = ($latestRelease.tag_name -replace '^v', '') -replace '\.windows.*', ''
+        $installedVersion = ((& $portableGitExe --version) -replace 'git version ', '').Trim()
+        if ($latestVersion -and $installedVersion -and ($installedVersion -ne $latestVersion)) {
+            Write-DevSetupStatus update "Git" "newer PortableGit available: $latestVersion (installed $installedVersion)"
+        }
+    } catch {
+        Write-DevSetupStatus warn "Git" "could not check for a newer PortableGit release: $($_.Exception.Message)"
+    }
+}
 
 if ($Audit) {
     if ($pathGit -and -not $ForcePortable) {
@@ -63,6 +88,7 @@ if ($Audit) {
 
         Write-DevSetupGitIdentityStatus $config $gitExe -Audit
     }
+    if ($PrintPath -and (Test-Path $gitExe)) { $gitExe }
     return
 }
 
@@ -89,12 +115,12 @@ if (-not (Test-Path $gitExe)) {
 $credentialSettings = Get-DevSetupGitCredentialSetting $config
 
 if ($gitExe.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-    & $gitExe config --system --unset-all credential.helper 2>$null
+    & $gitExe config --system --unset-all credential.helper 2> $null
 }
 
 $credentialChanges = 0
 foreach ($setting in $credentialSettings) {
-    if ((& $gitExe config --global --get $setting.Key 2>$null) -eq $setting.Value) { continue }
+    if ((& $gitExe config --global --get $setting.Key) -eq $setting.Value) { continue }
     if ($setting.ReplaceAll) { & $gitExe config --global --replace-all $setting.Key $setting.Value }
     else { & $gitExe config --global $setting.Key $setting.Value }
     $credentialChanges++
@@ -116,3 +142,5 @@ Add-DevSetupUserPath (Join-Path $InstallDir "cmd")
 if ($ConfigureVSCode) {
     Set-DevSetupVSCodeSetting $config (Get-DevSetupValue $config "advanced.vscode.managedSettingKeys.gitPath" "git.path") $gitExe
 }
+
+if ($PrintPath) { $gitExe }

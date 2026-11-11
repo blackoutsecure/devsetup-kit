@@ -8,8 +8,8 @@ Thank you for your interest in contributing.
 2. Clone your fork:
    `git clone https://github.com/your-username/bos-devsetup-kit.git`
 3. Create a feature branch: `git checkout -b feat/your-feature`.
-4. No installation step is required — the scripts are the product. Optional
-   local tooling for linting:
+4. Run the setup script to install the local toolchain. ShellCheck is included
+   by default; optional additional lint tooling includes:
    - [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer) for `*.ps1`
    - [`shellcheck`](https://www.shellcheck.net/) for `*.sh`
    - [`ruff`](https://github.com/astral-sh/ruff) for `src/configure-vscode.py`

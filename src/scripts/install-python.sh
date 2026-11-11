@@ -12,16 +12,52 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../config.sh
 . "$script_dir/../config.sh"
 
-mode="${1:-}"
 print_path=0
 audit=0
-case "$mode" in
-	--print-path) print_path=1 ;;
-	--audit) audit=1 ;;
-esac
+uninstall=0
+check_upgrades=0
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--print-path) print_path=1 ;;
+		--audit) audit=1 ;;
+		--uninstall) uninstall=1 ;;
+		--check-upgrades) check_upgrades=1 ;; # no-op here: uv pins exact versions, not a rolling latest
+		*) echo "Unknown option: $1" >&2; exit 2 ;;
+	esac
+	shift
+done
+
+devsetup_assert_execution_mode "$audit"
 
 python_version="$(devsetup_config user.python.version 3.14)"
 uv_install_url="$(devsetup_config advanced.python.uvInstallUrl.unix https://astral.sh/uv/install.sh)"
+
+if [[ $uninstall -eq 1 ]]; then
+	# Only uninstall if uv actually reports this version installed - uv merely
+	# being on PATH doesn't mean it's the one that put this version in place
+	# (python3/python found on PATH already is left alone by the installer).
+	uv_managed_path=""
+	if command -v uv >/dev/null 2>&1; then
+		uv_managed_path="$(uv python find "$python_version" 2>/dev/null || true)"
+	fi
+	# `uv python find` also resolves system interpreters it didn't install, so only
+	# treat this as uv-managed when the resolved path is under uv's own data directory.
+	case "$uv_managed_path" in
+		*/uv/*) : ;;
+		*) uv_managed_path="" ;;
+	esac
+	if [[ -n "$uv_managed_path" ]]; then
+		if [[ $audit -eq 1 ]]; then
+			devsetup_status remove Python "would uninstall CPython $python_version via uv"
+		else
+			uv python uninstall "$python_version"
+			devsetup_status remove Python "uninstalled CPython $python_version via uv"
+		fi
+	else
+		devsetup_status warn Python "no uv-managed CPython $python_version found to uninstall (a system Python, if any, is left alone)"
+	fi
+	exit 0
+fi
 
 python_command=""
 for candidate in python3 python; do
@@ -46,7 +82,7 @@ if [[ -z "$python_command" ]]; then
 	if ! command -v uv >/dev/null 2>&1; then
 		devsetup_status install uv "installing to \$HOME/.local/bin (user-local, no admin, no GUI)" >&2
 		uv_installer="$HOME/.uv-install.sh"
-		curl -LsSf "$uv_install_url" -o "$uv_installer"
+		curl -L --progress-bar -Sf "$uv_install_url" -o "$uv_installer"
 		"${BASH:-bash}" "$uv_installer" >&2
 		rm -f "$uv_installer"
 		export PATH="$HOME/.local/bin:$PATH"

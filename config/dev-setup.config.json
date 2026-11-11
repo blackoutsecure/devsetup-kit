@@ -6,13 +6,26 @@
     ],
     "user": {
         "install": {
+            "homebrew": true,
             "git": true,
+            "githubCli": true,
             "node": true,
+            "prettier": true,
             "python": true,
+            "rust": true,
+            "dioxus": true,
+            "php": true,
+            "powershell": true,
+            "shellcheck": true,
+            "ripgrep": true,
+            "busybox": true,
+            "packer": true,
+            "gpg": true,
             "vscodeSettings": true,
             "devcontainerDefaults": true,
             "mcpServers": true
         },
+        "checkUpgrades": true,
         "git": {
             "installDir": "",
             "forcePortable": false,
@@ -20,16 +33,31 @@
             "userEmail": ""
         },
         "python": {
-            "version": "3.14"
+            "version": "3.14",
+            "allowGlobalPackageInstalls": false,
+            "recommendedVirtualEnvironment": ".venv"
+        },
+        "rust": {
+            "components": ["rustfmt", "clippy", "rust-src"],
+            "targets": []
         },
         "vscode": {
-            "profiles": [
-                "stable",
-                "insiders"
-            ],
+            "profiles": ["stable", "insiders"],
+            "settingsSync": {
+                "syncAfterSetup": true,
+                "requiredProvider": "github"
+            },
+            "copilot": {
+                "autoAcceptDelay": 1,
+                "autopilot": false,
+                "fusion": false
+            },
+            "terminalInstructions": {
+                "manage": true
+            },
             "extensions": {
                 "manage": true,
-                "uninstallBlocked": false,
+                "uninstallBlocked": true,
                 "install": [
                     "charliermarsh.ruff",
                     "davidanson.vscode-markdownlint",
@@ -38,15 +66,20 @@
                     "esbenp.prettier-vscode",
                     "github.vscode-github-actions",
                     "github.vscode-pull-request-github",
+                    "hashicorp.hcl",
                     "ms-azuretools.vscode-containers",
+                    "ms-playwright.playwright",
                     "ms-python.debugpy",
                     "ms-python.python",
                     "ms-python.vscode-pylance",
+                    "ms-python.vscode-python-envs",
                     "ms-vscode-remote.remote-containers",
                     "ms-vscode.makefile-tools",
                     "ms-vscode.powershell",
                     "redhat.vscode-yaml",
+                    "rust-lang.rust-analyzer",
                     "streetsidesoftware.code-spell-checker",
+                    "timonwong.shellcheck",
                     "yzhang.markdown-all-in-one"
                 ],
                 "block": [
@@ -64,7 +97,26 @@
                 ]
             },
             "settings": {
+                "agents.voice.enabled": false,
+                "agents.voice.showButton": false,
+                "chat.defaultModel": "auto",
+                "chat.defaultToCopilotHarness": true,
+                "chat.editor.preferCopilotHarness": true,
+                "chat.newSession.defaultMode": "agent",
+                "chat.requestQueuing.defaultAction": "queue",
+                "chat.sessionSync.enabled": true,
+                "chat.tools.terminal.enforceTimeoutFromModel": true,
+                "chat.tools.terminal.idleSilenceTimeoutMs": 60000,
+                "chat.tools.terminal.outputLocation": "terminal",
+                "dictation.enabled": false,
+                "dictation.showButton": false,
+                "github.copilot.chat.autoModeTierOverride": "balance",
+                "github.copilot.chat.localIndex.enabled": true,
                 "diffEditor.maxComputationTime": 0,
+                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "editor.formatOnSave": true,
+                "extensions.autoCheckUpdates": true,
+                "extensions.autoUpdate": true,
                 "explorer.confirmDelete": true,
                 "explorer.confirmDragAndDrop": false,
                 "explorer.confirmPasteNative": false,
@@ -78,19 +130,30 @@
                 "markdown.extension.completion.enabled": true,
                 "markdown.extension.preview.autoShowPreviewToSide": true,
                 "python.analysis.typeCheckingMode": "strict",
+                "python.terminal.activateEnvironment": true,
                 "redhat.telemetry.enabled": false,
+                "rust-analyzer.check.command": "clippy",
+                "[rust]": {
+                    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+                    "editor.formatOnSave": true
+                },
                 "remote.autoForwardPortsSource": "hybrid",
                 "security.workspace.trust.banner": "always",
                 "security.workspace.trust.startupPrompt": "always",
                 "settingsSync.ignoredSettings": [
+                    "php.validate.executablePath",
+                    "powershell.powerShellAdditionalExePaths",
                     "yaml.schemas"
                 ],
                 "settingsSync.keybindingsPerPlatform": false,
                 "terminal.integrated.enableMultiLinePasteWarning": "never",
                 "terminal.integrated.enablePersistentSessions": false,
+                "terminal.integrated.hideOnStartup": "never",
                 "terminal.integrated.persistentSessionReviveProcess": "never",
+                "terminal.integrated.shellIntegration.enabled": true,
                 "update.showReleaseNotes": false,
                 "window.confirmSaveUntitledWorkspace": false,
+                "window.confirmBeforeClose": "always",
                 "workbench.startupEditor": "none",
                 "yaml.disableSchemaDetection": [
                     "**/.github/workflows/*.yml",
@@ -105,6 +168,9 @@
         "mcp": {
             "manage": true,
             "removeBlocked": false,
+            "copilotConfig": {
+                "manage": true
+            },
             "servers": {
                 "io.github.github/github-mcp-server": {
                     "type": "http",
@@ -117,16 +183,12 @@
                 "microsoft/markitdown": {
                     "type": "stdio",
                     "command": "uvx",
-                    "args": [
-                        "markitdown-mcp@0.0.1a4"
-                    ]
+                    "args": ["markitdown-mcp@0.0.1a8"]
                 },
                 "microsoft/playwright-mcp": {
                     "type": "stdio",
                     "command": "npx",
-                    "args": [
-                        "@playwright/mcp@0.0.79"
-                    ]
+                    "args": ["--yes", "@playwright/mcp@0.0.83"]
                 }
             },
             "inputs": [],
@@ -150,9 +212,24 @@
                 "GitHub.copilot-chat",
                 "GitHub.vscode-pull-request-github",
                 "GitHub.vscode-github-actions",
+                "charliermarsh.ruff",
+                "dbaeumer.vscode-eslint",
                 "eamodio.gitlens",
                 "editorconfig.editorconfig",
+                "esbenp.prettier-vscode",
+                "davidanson.vscode-markdownlint",
+                "hashicorp.hcl",
+                "ms-playwright.playwright",
+                "ms-python.debugpy",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.vscode-python-envs",
+                "ms-vscode.makefile-tools",
+                "ms-vscode.powershell",
                 "redhat.vscode-yaml",
+                "rust-lang.rust-analyzer",
+                "streetsidesoftware.code-spell-checker",
+                "yzhang.markdown-all-in-one",
                 "timonwong.shellcheck"
             ],
             "settings": {
@@ -169,8 +246,8 @@
             "portableReleaseApiUrl": "https://api.github.com/repos/git-for-windows/git/releases/latest",
             "portableAssetPattern": "PortableGit-*64-bit.7z.exe",
             "homebrewFormula": "git",
-            "homebrewInstallUrl": "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh",
-            "linuxbrewShellenv": "/home/linuxbrew/.linuxbrew/bin/brew",
+            "homebrewInstallUrl": "https://github.com/Homebrew/brew/archive/refs/heads/master.tar.gz",
+            "linuxbrewShellenv": "$HOME/.linuxbrew/bin/brew",
             "credential": {
                 "windows": {
                     "helper": "manager",
@@ -185,6 +262,21 @@
                 }
             }
         },
+        "githubCli": {
+            "homebrewFormula": "gh",
+            "wingetPackageId": "GitHub.cli",
+            "portableInstallDir": "%LOCALAPPDATA%\\Programs\\GitHub CLI",
+            "portableReleaseApiUrl": "https://api.github.com/repos/cli/cli/releases/latest",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\gh.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\bin\\gh.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\*\\bin\\gh.exe",
+                "%LOCALAPPDATA%\\Programs\\GitHub CLI\\gh.exe",
+                "%LOCALAPPDATA%\\Programs\\GitHub CLI\\bin\\gh.exe",
+                "%ProgramFiles%\\GitHub CLI\\gh.exe",
+                "%ProgramFiles%\\GitHub CLI\\bin\\gh.exe"
+            ]
+        },
         "python": {
             "wingetPackageId": "Python.Python.{version}",
             "windowsInstallRoot": "%LOCALAPPDATA%\\Programs\\Python",
@@ -196,12 +288,76 @@
         },
         "node": {
             "wingetPackageId": "OpenJS.NodeJS.LTS",
+            "portableBaseUrl": "https://nodejs.org/dist",
+            "portableInstallDir": "%LOCALAPPDATA%\\Programs\\nodejs",
             "homebrewFormula": "node",
             "windowsSearchPaths": [
                 "%ProgramFiles%\\nodejs\\node.exe",
                 "%LOCALAPPDATA%\\Programs\\nodejs\\node.exe",
                 "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}*\\node-v*\\node.exe"
             ]
+        },
+        "prettier": {
+            "npmPackage": "prettier",
+            "npmPackageSpec": "prettier@latest",
+            "windowsGlobalPrefix": "%USERPROFILE%\\.npm-global",
+            "unixGlobalPrefix": "$HOME/.npm-global"
+        },
+        "rust": {
+            "homebrewFormula": "rustup",
+            "wingetPackageId": "Rustlang.Rustup",
+            "bootstrapBaseUrl": "https://static.rust-lang.org/rustup/dist"
+        },
+        "dioxus": {
+            "cargoPackage": "dioxus-cli",
+            "cratesApiBaseUrl": "https://crates.io/api/v1/crates"
+        },
+        "php": {
+            "homebrewFormula": "php",
+            "wingetPackageId": "PHP.PHP.8.5",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\php.exe"
+            ]
+        },
+        "powershell": {
+            "homebrewFormula": "powershell",
+            "wingetPackageId": "Microsoft.PowerShell",
+            "portableReleaseApiUrl": "https://api.github.com/repos/PowerShell/PowerShell/releases/latest",
+            "portableInstallDir": "%LOCALAPPDATA%\\Programs\\PowerShell"
+        },
+        "shellcheck": {
+            "homebrewFormula": "shellcheck",
+            "wingetPackageId": "koalaman.shellcheck",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\shellcheck.exe"
+            ]
+        },
+        "ripgrep": {
+            "homebrewFormula": "ripgrep",
+            "wingetPackageId": "BurntSushi.ripgrep.MSVC",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\rg.exe"
+            ]
+        },
+        "busybox": {
+            "wingetPackageId": "frippery.busybox-w32",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\busybox.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\busybox*.exe"
+            ]
+        },
+        "packer": {
+            "homebrewFormula": "hashicorp/tap/packer",
+            "wingetPackageId": "Hashicorp.Packer",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\packer.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\packer.exe"
+            ]
+        },
+        "gpg": {
+            "homebrewFormula": "gnupg",
+            "portableGitRelativePath": "usr\\bin\\gpg.exe",
+            "keyExpiry": "2y"
         },
         "vscode": {
             "profileDirectories": {
@@ -220,11 +376,46 @@
             },
             "managedSettingKeys": {
                 "gitPath": "git.path",
-                "pythonInterpreter": "python.defaultInterpreterPath"
+                "pythonInterpreter": "python.defaultInterpreterPath",
+                "pythonGlobalModuleInstallation": "python.globalModuleInstallation",
+                "phpValidator": "php.validate.executablePath",
+                "powerShellAdditionalExePaths": "powershell.powerShellAdditionalExePaths"
+            },
+            "settingsSync": {
+                "stateDbRelativePath": "globalStorage/state.vscdb",
+                "enabledKey": "sync.enable",
+                "accountProviderKey": "userDataSyncAccountProvider",
+                "accountPreferenceKey": "userDataSyncAccountPreference",
+                "syncCliArgs": ["--sync", "on"]
             },
             "extensionCli": {
                 "stable": "code",
                 "insiders": "code-insiders"
+            },
+            "extensionCliFallbackPaths": {
+                "stable": {
+                    "macos": [
+                        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+                        "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+                    ],
+                    "linux": [
+                        "/usr/share/code/bin/code",
+                        "/usr/bin/code",
+                        "/snap/bin/code",
+                        "/var/lib/flatpak/exports/bin/com.visualstudio.code"
+                    ]
+                },
+                "insiders": {
+                    "macos": [
+                        "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
+                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"
+                    ],
+                    "linux": [
+                        "/usr/share/code-insiders/bin/code-insiders",
+                        "/usr/bin/code-insiders",
+                        "/snap/bin/code-insiders"
+                    ]
+                }
             },
             "mcpFileName": "mcp.json",
             "settings": {
