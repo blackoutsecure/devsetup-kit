@@ -52,6 +52,48 @@ if ($pathGit) {
 
 $needsInstall = (-not (Test-Path $portableGitExe)) -and ($ForcePortable -or -not $pathGit)
 
+function Set-DevSetupGitCredentials {
+    param([string]$GitExe, $Config, [switch]$Audit)
+
+    $settings = @(Get-DevSetupGitCredentialSetting $Config)
+    $helper = ($settings | Where-Object { $_.Key -eq "credential.helper" }).Value
+    $effective = & $GitExe config --get credential.helper 2>$null
+    $helperStatus = $LASTEXITCODE
+    if ($helperStatus -ne 0 -and $helperStatus -ne 1) {
+        throw "Could not read Git credential helper configuration (exit $helperStatus)."
+    }
+    if ($helperStatus -eq 0 -and $effective -ne $helper) {
+        Write-DevSetupStatus skip "git cfg" "existing credential helper preserved"
+        return
+    }
+
+    $pending = @()
+    foreach ($setting in $settings) {
+        if ($setting.Key -eq "credential.helper" -and $helperStatus -eq 0) { continue }
+        $current = & $GitExe config --global --get $setting.Key 2>$null
+        $status = $LASTEXITCODE
+        if ($status -ne 0 -and $status -ne 1) {
+            throw "Could not read Git configuration '$($setting.Key)' (exit $status)."
+        }
+        if ($status -eq 0 -and $current -eq $setting.Value) { continue }
+        $pending += $setting.Key
+        if (-not $Audit) {
+            if ($setting.ReplaceAll) { & $GitExe config --global --replace-all $setting.Key $setting.Value }
+            else { & $GitExe config --global $setting.Key $setting.Value }
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not set Git configuration '$($setting.Key)' (exit $LASTEXITCODE)."
+            }
+        }
+    }
+    if ($pending.Count -eq 0) {
+        Write-DevSetupStatus found "git cfg" "credential settings already correct"
+    } elseif ($Audit) {
+        Write-DevSetupStatus install "git cfg" "would set $($pending -join ', ')"
+    } else {
+        Write-DevSetupStatus install "git cfg" "$($pending.Count) credential value(s) changed"
+    }
+}
+
 if ($CheckUpgrades -and -not $pathGit -and (Test-Path $portableGitExe)) {
     # Only PortableGit is managed by this script; a system git on PATH is left alone.
     try {
@@ -77,15 +119,7 @@ if ($Audit) {
     }
 
     if (Test-Path $gitExe) {
-        $pending = @(Get-DevSetupGitCredentialSetting $config |
-            Where-Object { (& $gitExe config --global --get $_.Key 2>$null) -ne $_.Value } |
-            ForEach-Object { $_.Key })
-        if ($pending.Count) {
-            Write-DevSetupStatus install "git cfg" "would set $($pending -join ', ')"
-        } else {
-            Write-DevSetupStatus found "git cfg" "credential settings already correct"
-        }
-
+        Set-DevSetupGitCredentials -GitExe $gitExe -Config $config -Audit
         Write-DevSetupGitIdentityStatus $config $gitExe -Audit
     }
     if ($PrintPath -and (Test-Path $gitExe)) { $gitExe }
@@ -112,24 +146,7 @@ if (-not (Test-Path $gitExe)) {
     throw "PortableGit setup failed: $gitExe not found."
 }
 
-$credentialSettings = Get-DevSetupGitCredentialSetting $config
-
-if ($gitExe.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-    & $gitExe config --system --unset-all credential.helper 2> $null
-}
-
-$credentialChanges = 0
-foreach ($setting in $credentialSettings) {
-    if ((& $gitExe config --global --get $setting.Key) -eq $setting.Value) { continue }
-    if ($setting.ReplaceAll) { & $gitExe config --global --replace-all $setting.Key $setting.Value }
-    else { & $gitExe config --global $setting.Key $setting.Value }
-    $credentialChanges++
-}
-if ($credentialChanges -gt 0) {
-    Write-DevSetupStatus install "git cfg" "$credentialChanges credential value(s) changed"
-} else {
-    Write-DevSetupStatus found "git cfg" "credential settings already correct"
-}
+Set-DevSetupGitCredentials -GitExe $gitExe -Config $config
 
 $userName = Get-DevSetupValue $config "user.git.userName"
 $userEmail = Get-DevSetupValue $config "user.git.userEmail"

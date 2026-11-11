@@ -342,6 +342,75 @@ exit 1
         self.assertEqual(updated.returncode, 0, updated.stdout + updated.stderr)
         self.assertIn("newer PortableGit available: 2.51.0.windows.2", updated.stdout)
 
+    def test_portable_git_preserves_effective_and_disabled_helpers(self):
+        kit = self.root / "kit"
+        scripts = kit / "src" / "scripts"
+        scripts.mkdir(parents=True)
+        shutil.copyfile(ROOT / "src/scripts/install-portable-git.ps1", scripts / "install-portable-git.ps1")
+        original_config = str(ROOT / "src/config.ps1").replace("'", "''")
+        (kit / "src/config.ps1").write_text(
+            f". '{original_config}'\n"
+            "function Add-DevSetupUserPath { param($Path) }\n"
+        )
+        portable = self.root / "portable" / "cmd"
+        portable.mkdir(parents=True)
+        self.executable(portable / "git.exe", 'exec "$REAL_GIT" "$@"\n')
+        self.env["REAL_GIT"] = shutil.which("git")
+        self.env["GIT_CONFIG_GLOBAL"] = str(self.root / "gitconfig")
+        self.env["GIT_CONFIG_SYSTEM"] = str(self.root / "system-gitconfig")
+        self.env.pop("GIT_CONFIG_NOSYSTEM", None)
+        git = self.env["REAL_GIT"]
+        system = Path(self.env["GIT_CONFIG_SYSTEM"])
+        global_config = Path(self.env["GIT_CONFIG_GLOBAL"])
+        subprocess.run([git, "config", "--file", str(system), "credential.helper", "system-custom"],
+                       env=self.env, check=True, timeout=30)
+        script = str(scripts / "install-portable-git.ps1").replace("'", "''")
+        directory = str(portable.parent).replace("'", "''")
+        command = f"& '{script}' -InstallDir '{directory}'"
+        before_system = system.read_bytes()
+        for value in ("custom", ""):
+            subprocess.run([git, "config", "--global", "credential.helper", value],
+                           env=self.env, check=True, timeout=30)
+            before_global = global_config.read_bytes()
+            audit = self.run_powershell(command + " -Audit")
+            self.assertEqual(audit.returncode, 0, audit.stdout + audit.stderr)
+            self.assertIn("existing credential helper preserved", audit.stdout)
+            applied = self.run_powershell(command)
+            self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+            self.assertIn("existing credential helper preserved", applied.stdout)
+            self.assertEqual(global_config.read_bytes(), before_global)
+            self.assertEqual(system.read_bytes(), before_system)
+        global_config.unlink()
+        subprocess.run([git, "config", "--file", str(system), "credential.helper", "manager"],
+                       env=self.env, check=True, timeout=30)
+        before_system = system.read_bytes()
+        effective = subprocess.run([git, "config", "--get", "credential.helper"],
+                                   env=self.env, text=True, capture_output=True, timeout=30)
+        self.assertEqual(effective.stdout.strip(), "manager")
+        applied = self.run_powershell(command)
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        self.assertNotIn("existing credential helper preserved", applied.stdout)
+        self.assertEqual(system.read_bytes(), before_system)
+        helper = subprocess.run([git, "config", "--global", "--get", "credential.helper"],
+                                env=self.env, text=True, capture_output=True, timeout=30)
+        self.assertEqual(helper.returncode, 1)
+        global_config.unlink()
+        self.env["GIT_CONFIG_NOSYSTEM"] = "1"
+        audit = self.run_powershell(command + " -Audit")
+        self.assertEqual(audit.returncode, 0, audit.stdout + audit.stderr)
+        self.assertIn("would set credential.helper", audit.stdout)
+        self.assertFalse(global_config.exists())
+        applied = self.run_powershell(command)
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        before_global = global_config.read_bytes()
+        second = self.run_powershell(command)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn("credential settings already correct", second.stdout)
+        self.assertEqual(global_config.read_bytes(), before_global)
+        global_config.write_text("[credential\n")
+        invalid = self.run_powershell(command + " -Audit")
+        self.assertNotEqual(invalid.returncode, 0, invalid.stdout + invalid.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
