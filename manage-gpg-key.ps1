@@ -45,7 +45,9 @@ function New-DevSetupRandomSecret {
     [OutputType([securestring])]
     param()
 
-    $bytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24)
+    $bytes = New-Object byte[] 24
+    $random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $random.GetBytes($bytes) } finally { $random.Dispose() }
     $plain = ([Convert]::ToBase64String($bytes) -replace '[+/=]', '').Substring(0, 24)
     return (ConvertTo-SecureString -String $plain -AsPlainText -Force)
 }
@@ -121,7 +123,8 @@ if ($Generate) {
 
     $expiry = Get-DevSetupValue $config "advanced.gpg.keyExpiry" "2y"
     $batchFile = New-TemporaryFile
-    @"
+    try {
+        @"
 %echo Generating GPG key for git signing
 Key-Type: RSA
 Key-Length: 4096
@@ -135,12 +138,15 @@ Passphrase: $plainKeyPassphrase
 %echo done
 "@ | Set-Content $batchFile.FullName -Encoding ascii
 
-    Write-DevSetupStatus install "GPG key" "generating a new RSA 4096 key for $KeyName <$KeyEmail> (expires in $expiry)"
-    & $gpg --batch --pinentry-mode loopback --gen-key $batchFile.FullName 2>&1 | Out-Null
-    Remove-Item $batchFile.FullName -ErrorAction SilentlyContinue
-    if ($LASTEXITCODE -ne 0) { throw "gpg key generation failed (exit code $LASTEXITCODE)." }
+        Write-DevSetupStatus install "GPG key" "generating a new RSA 4096 key for $KeyName <$KeyEmail> (expires in $expiry)"
+        $gpgStatus = & $gpg --batch --status-fd 1 --pinentry-mode loopback --gen-key $batchFile.FullName 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "gpg key generation failed (exit code $LASTEXITCODE)." }
+    } finally {
+        Remove-Item -LiteralPath $batchFile.FullName -Force
+    }
 
-    $keyId = (& $gpg --list-secret-keys --with-colons $KeyEmail | Where-Object { $_ -like "fpr:*" } | Select-Object -First 1) -split ":" | Select-Object -Last 1
+    $created = $gpgStatus | Where-Object { "$_" -match '^\[GNUPG:\] KEY_CREATED [BPS] ([0-9A-Fa-f]+)$' } | Select-Object -First 1
+    $keyId = if ($created -and "$created" -match '^\[GNUPG:\] KEY_CREATED [BPS] ([0-9A-Fa-f]+)$') { $Matches[1] } else { $null }
     if (-not $keyId) { throw "Key generation reported success but the new key could not be found for $KeyEmail." }
     Write-DevSetupStatus found "GPG key" "generated $keyId"
 

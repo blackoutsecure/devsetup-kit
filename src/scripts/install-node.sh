@@ -77,3 +77,4 @@ fi
 devsetup_status found Node.js "$(node --version) at $(command -v node)"
 devsetup_status found npm "$(npm --version) at $(command -v npm)"
 [[ $check_upgrades -eq 1 ]] && devsetup_check_homebrew_upgrade Node.js "$formula"
+exit 0

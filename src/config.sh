@@ -360,7 +360,13 @@ devsetup_install_via_homebrew() {
 	else
 		devsetup_status found "$component" "$("$command_path" --version 2>&1 | head -n 1) at $command_path"
 	fi
-	[[ "$check_upgrades" -eq 1 ]] && devsetup_check_homebrew_upgrade "$component" "$formula"
+	if [[ "$check_upgrades" -eq 1 ]]; then
+		if [[ "$print_path" -eq 1 ]]; then
+			devsetup_check_homebrew_upgrade "$component" "$formula" >&2
+		else
+			devsetup_check_homebrew_upgrade "$component" "$formula"
+		fi
+	fi
 	return 0
 }
 

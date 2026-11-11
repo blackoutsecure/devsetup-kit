@@ -77,6 +77,19 @@ function global:wsl.exe {
         self.assertIn("starts as developer", result.stdout)
         self.assertNotIn("sudo -n", result.stdout)
 
+    def test_explicit_different_user_is_configured_on_default_distribution(self):
+        result = self.run_setup("-Configure -UserName developer", current_user="alice")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("CALL -u root -- bash -s -- developer", result.stdout)
+        self.assertIn("SCRIPT ", result.stdout)
+        self.assertIn("restart pending", result.stdout)
+
+    def test_audit_reports_requested_user_change_without_writing(self):
+        result = self.run_setup("-Audit -Configure -UserName developer", current_user="alice")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("would configure", result.stdout)
+        self.assertNotIn("SCRIPT ", result.stdout)
+
     def test_restart_override_targets_only_named_distribution(self):
         result = self.run_setup(
             "-Configure -UserName developer -Distribution TestDistro -RestartDistribution"
