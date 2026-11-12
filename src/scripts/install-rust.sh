@@ -77,6 +77,22 @@ invoke_rustup() {
 	PATH="$rustup_dir:$cargo_bin:$PATH" RUSTUP_AUTO_INSTALL=0 "$rustup" "$@"
 }
 
+invoke_rustup_check() {
+	local output exit_code
+	if output="$(invoke_rustup check)"; then
+		printf '%s\n' "$output"
+		return 0
+	else
+		exit_code=$?
+	fi
+	if [[ $exit_code -eq 100 ]] && printf '%s\n' "$output" | grep -qi 'update available'; then
+		printf '%s\n' "$output"
+		return 0
+	fi
+	if [[ -n "$output" ]]; then printf '%s\n' "$output" >&2; fi
+	return "$exit_code"
+}
+
 rust_has_entry() {
 	local entries="$1" name="$2" component="${3:-0}"
 	printf '%s\n' "$entries" | awk -v name="$name" -v host="$default_host" -v component="$component" '
@@ -108,7 +124,7 @@ fi
 
 upgrades=""
 if [[ $check_upgrades -eq 1 || $upgrade -eq 1 ]]; then
-	if ! upgrades="$(invoke_rustup check)"; then
+	if ! upgrades="$(invoke_rustup_check)"; then
 		devsetup_status warn Rust "rustup upgrade check failed"
 		exit 1
 	fi
@@ -124,7 +140,7 @@ if [[ $check_upgrades -eq 1 || $upgrade -eq 1 ]]; then
 			else
 				devsetup_status install "Rust stable" "updating $stable_toolchain and its installed components/targets without rustup self-update"
 				invoke_rustup update "$stable_toolchain" --no-self-update
-				upgrades="$(invoke_rustup check)"
+				upgrades="$(invoke_rustup_check)"
 				stable_status="$(printf '%s\n' "$upgrades" | awk -v toolchain="$stable_toolchain" '$1 == toolchain && $2 == "-"')"
 				if [[ "$stable_status" == *$'\n'* ]] || ! printf '%s\n' "$stable_status" | grep -qi 'up to date'; then
 					printf 'Rust update verification failed: rustup check does not report %s up to date.\n' "$stable_toolchain" >&2

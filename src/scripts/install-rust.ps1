@@ -88,7 +88,11 @@ function Invoke-Rustup {
         $env:RUSTUP_AUTO_INSTALL = "0"
         $env:Path = "$cargoBin;$(Split-Path -Parent $rustup);$previousPath"
         & $rustup @Arguments
-        if ($LASTEXITCODE -ne 0) { throw "rustup $($Arguments -join ' ') failed (exit $LASTEXITCODE)" }
+        $exitCode = $LASTEXITCODE
+        $isUpdateCheck = $Arguments.Count -eq 1 -and $Arguments[0] -eq "check"
+        if ($exitCode -ne 0 -and -not ($isUpdateCheck -and $exitCode -eq 100)) {
+            throw "rustup $($Arguments -join ' ') failed (exit $exitCode)"
+        }
     } finally {
         $env:RUSTUP_AUTO_INSTALL = $autoInstall
         $env:Path = $previousPath

@@ -418,7 +418,10 @@ switch ($arguments[0]) {
     'check' {
         if (Test-Path (Join-Path $env:FIXTURE 'check-failure')) { exit 8 }
         if (Test-Path (Join-Path $env:FIXTURE 'updated')) { 'stable-host - Up to date : 1.99.1' }
-        else { 'stable-host - Update available : 1.98.0 -> 1.99.1' }
+        else {
+            'stable-host - Update available : 1.98.0 -> 1.99.1'
+            exit 100
+        }
         'rustup - Up to date : 1.29'
     }
     default { throw "Unexpected command: $arguments" }
@@ -588,7 +591,10 @@ run)
 check)
     [[ ! -f "$HOME/check-failure" ]] || exit 8
     if [[ -f "$HOME/updated" ]]; then echo 'stable-host - Up to date : 1.99.1'
-    else echo 'stable-host - Update available : 1.98.0 -> 1.99.1'; fi
+    else
+        echo 'stable-host - Update available : 1.98.0 -> 1.99.1'
+        exit 100
+    fi
     echo 'rustup - Up to date : 1.29' ;;
 *) exit 2 ;;
 esac
