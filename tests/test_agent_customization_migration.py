@@ -75,6 +75,124 @@ class AgentCustomizationMigrationTests(unittest.TestCase):
             for path in self.root.rglob("*") if path.is_file()
         }
 
+    def test_review_inventories_current_items_without_writes_or_secret_output(self) -> None:
+        content = json.loads(self.mcp.read_text())
+        content["servers"]["github"]["headers"] = {"Authorization": "private-value"}
+        content["servers"]["native"] = {
+            "type": "http", "url": "${input:private-endpoint}",
+        }
+        self.mcp.write_text(json.dumps(content), encoding="utf-8")
+        personal = self.instructions.with_name("personal.instructions.md")
+        personal.write_text("Private instruction contents", encoding="utf-8")
+        before = self.snapshot()
+
+        self.assertEqual(applier.review_agent_customizations(self.config), 0)
+
+        self.assertEqual(self.snapshot(), before)
+        details = "\n".join(call.args[2] for call in self.report.call_args_list)
+        self.assertIn("MCP github: kit migration candidate", details)
+        self.assertIn("MCP unmanaged: native review", details)
+        self.assertIn("MCP native: native review", details)
+        self.assertIn("personal.instructions.md: native review", details)
+        self.assertIn("terminal-execution.instructions.md: kit migration candidate", details)
+        self.assertNotIn("private-value", details)
+        self.assertNotIn("private-endpoint", details)
+        self.assertNotIn("Private instruction contents", details)
+        self.assertFalse(self.copilot.exists())
+
+    def test_review_refreshes_after_config_changes_and_source_retirement(self) -> None:
+        added = {"type": "http", "url": "https://new.test/mcp"}
+        self.config["user"]["mcp"]["servers"]["new-server"] = added
+        content = json.loads(self.mcp.read_text())
+        content["servers"]["new-server"] = added
+        self.mcp.write_text(json.dumps(content), encoding="utf-8")
+        self.assertEqual(applier.review_agent_customizations(self.config), 0)
+        details = "\n".join(call.args[2] for call in self.report.call_args_list)
+        self.assertIn("MCP new-server: kit migration candidate", details)
+        self.assertIn("3 kit candidate(s), 1 native review item(s)", details)
+
+        self.assertEqual(self.migrate(), 0)
+        self.report.reset_mock()
+        before = self.snapshot()
+        self.assertEqual(applier.review_agent_customizations(self.config), 0)
+        self.assertEqual(self.snapshot(), before)
+        details = "\n".join(call.args[2] for call in self.report.call_args_list)
+        self.assertIn("0 kit candidate(s), 1 native review item(s)", details)
+        self.assertNotIn("MCP github:", details)
+        self.assertNotIn("MCP new-server:", details)
+        self.assertNotIn("terminal-execution.instructions.md:", details)
+
+    def test_review_respects_management_opt_out_and_validates_source_shape(self) -> None:
+        self.config["user"]["mcp"]["manage"] = False
+        before = self.snapshot()
+        self.assertEqual(applier.review_agent_customizations(self.config), 0)
+        self.assertEqual(self.snapshot(), before)
+        details = "\n".join(call.args[2] for call in self.report.call_args_list)
+        self.assertIn("user.mcp.manage", details)
+        self.assertNotIn("kit migration candidate", details)
+        self.assertIn("0 kit candidate(s), 3 native review item(s)", details)
+
+        self.mcp.write_text('{"servers": []}', encoding="utf-8")
+        with self.assertRaisesRegex(SystemExit, "servers object"):
+            applier.review_agent_customizations(self.config)
+
+    def test_cli_review_is_read_only_and_cannot_be_combined_with_write_modes(self) -> None:
+        config = self.root / "config.json"
+        config.write_text(json.dumps(self.config), encoding="utf-8")
+        command = [
+            sys.executable, str(SOURCE), "--config", str(config), "--review-migrations",
+        ]
+        env = os.environ.copy()
+        env.pop("DEVSETUP_STATUS_LOG", None)
+        before = self.snapshot()
+        result = subprocess.run(
+            command, env=env, capture_output=True, text=True, timeout=30, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 kit candidate(s), 1 native review item(s)", result.stdout)
+        self.assertEqual(self.snapshot(), before)
+        for mode in (
+            ["--support-audit"], ["--copilot-chat-migration"],
+            ["--agent-customization-migration", "test"],
+        ):
+            result = subprocess.run(
+                [*command, *mode], env=env, capture_output=True, text=True,
+                timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertEqual(self.snapshot(), before)
+
+    def test_normal_setup_reviews_sources_without_migrating_and_is_idempotent(self) -> None:
+        self.config["user"]["install"] = {"devcontainerDefaults": False}
+        self.config["user"]["vscode"]["extensions"] = {"manage": False}
+        self.instructions.write_bytes(
+            (SOURCE.parent / "terminal-execution.instructions.md").read_bytes()
+        )
+        config = self.root / "config.json"
+        config.write_text(json.dumps(self.config), encoding="utf-8")
+        command = [
+            sys.executable, str(SOURCE), "--config", str(config), "--skip-settings-sync",
+        ]
+        env = os.environ.copy()
+        env.pop("DEVSETUP_STATUS_LOG", None)
+        before = self.snapshot()
+        for index, options in enumerate((["--dry-run"], [], [])):
+            result = subprocess.run(
+                [*command, *options], env=env, capture_output=True, text=True,
+                timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("2 kit candidate(s), 1 native review item(s)", result.stdout)
+            if index != 1:
+                self.assertEqual(self.snapshot(), before)
+            if index == 2:
+                self.assertNotIn("[install]", result.stdout)
+                self.assertNotIn("[warn]", result.stdout)
+            before = self.snapshot()
+            self.assertTrue(self.instructions.is_file())
+            self.assertIn("github", json.loads(self.mcp.read_text())["servers"])
+            self.assertFalse((self.copilot / "migration-backups").exists())
+
     def test_audit_does_not_create_destinations_or_backups(self) -> None:
         before = self.snapshot()
         self.assertEqual(self.migrate(True), 0)

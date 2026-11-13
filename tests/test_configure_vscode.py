@@ -1066,7 +1066,8 @@ class SyncOrderingTests(unittest.TestCase):
             patch("configure_vscode.status"),
         ]
         for name in ("manage_terminal_instructions", "manage_extensions", "manage_mcp",
-                     "manage_copilot_mcp", "validate_install", "sync_settings"):
+                     "manage_copilot_mcp", "validate_install",
+                     "review_agent_customizations", "sync_settings"):
             def record(*args, name=name):
                 events.append(name)
                 if name == "validate_install" and validation_error:
@@ -1086,7 +1087,8 @@ class SyncOrderingTests(unittest.TestCase):
     def test_sync_runs_after_all_managers_and_validation(self):
         self.assertEqual(self.run_main(), [
             "manage_terminal_instructions", "manage_extensions", "manage_mcp",
-            "manage_copilot_mcp", "validate_install", "sync_settings",
+            "manage_copilot_mcp", "validate_install",
+            "review_agent_customizations", "sync_settings",
         ])
 
     def test_cli_skip_flag_preserves_setup_but_never_requests_sync(self):
