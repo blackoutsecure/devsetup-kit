@@ -66,6 +66,10 @@ cargo="$(devsetup_rust_tool_path cargo || true)"
 dx="$(devsetup_rust_tool_path dx || true)"
 if [[ -z "$dx" ]]; then
 	if [[ $audit -eq 1 ]]; then
+		if [[ -z "$cargo" ]] && devsetup_skip_if_homebrew_write_blocked "Dioxus CLI"; then
+			devsetup_status skip "Dioxus PATH" "Cargo is unavailable because shared Homebrew writes are blocked"
+			exit 0
+		fi
 		if [[ -n "$cargo" ]] || devsetup_enabled user.install.rust; then
 			devsetup_status install "Dioxus CLI" "would install $package with cargo install --locked --bin dx --root \"$cargo_home\" after stable Rust/Cargo are available"
 			devsetup_status install "Dioxus PATH" "would expose $cargo_bin in new terminals after installation"
@@ -75,6 +79,10 @@ if [[ -z "$dx" ]]; then
 		exit 0
 	fi
 	if [[ -z "$cargo" ]]; then
+		if devsetup_skip_if_homebrew_write_blocked "Dioxus CLI"; then
+			devsetup_status skip "Dioxus PATH" "Cargo is unavailable because shared Homebrew writes are blocked"
+			exit 0
+		fi
 		printf 'Dioxus CLI requires stable Rust and Cargo. Run the Rust setup step first.\n' >&2
 		exit 1
 	fi

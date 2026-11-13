@@ -123,7 +123,9 @@ class DioxusInstallerTests(unittest.TestCase):
             (root / "src" / "config.sh").write_text(
                 '. "$REAL_MODULE"\n'
                 'devsetup_is_elevated() { return 1; }\n'
-                'devsetup_homebrew_path() { return 1; }\n'
+                'devsetup_homebrew_path() {\n'
+                '    if [[ -x "$HOME/brew" ]]; then printf "%s\\n" "$HOME/brew"; else return 1; fi\n'
+                '}\n'
                 'command() {\n'
                 '    if [[ "$1" == -v && ( "$2" == cargo || "$2" == dx ) ]]; then return 1; fi\n'
                 '    builtin command "$@"\n'
@@ -181,6 +183,23 @@ cat "$TEST_ROOT/metadata.json"
                 "audit": "--audit", "check": "--check-upgrades",
                 "check_only": "--check-upgrades-only", "uninstall": "--uninstall",
             }, profile, cargo, root / "cargo home" / "bin" / "dx")
+            cargo.unlink(missing_ok=True)
+            brew = root / "brew"
+            brew.write_text("""#!/usr/bin/env bash
+case "$1" in
+shellenv) printf 'export PATH="%s:$PATH"\\n' "$HOME" ;;
+--prefix) dirname "$HOME" ;;
+*) exit 2 ;;
+esac
+""")
+            brew.chmod(0o755)
+            output = run("--audit")
+            self.assertIn("[skip]", output)
+            self.assertIn("Dioxus CLI", output)
+            self.assertNotIn("would install dioxus-cli", output)
+            output = run()
+            self.assertIn("[skip]", output)
+            self.assertIn("Dioxus PATH", output)
 
     @unittest.skipUnless(POWERSHELL, "Windows PowerShell is required")
     def test_windows_audit_install_idempotence_upgrade_failures_and_modes(self):
