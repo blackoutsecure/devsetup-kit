@@ -513,7 +513,7 @@ devsetup_status() {
 devsetup_summary() {
 	local log_path="${1:-}" audit="${2:-0}" found=0 install=0 skip=0 warn=0 update=0 remove=0
 	local apply_command="${3:-./setup.sh}"
-	local warn_label install_label remove_label summary_line update_label changes
+	local warn_label install_label remove_label summary_line update_label changes shared_prefix_blocked=0
 	if [[ -n "$log_path" && -f "$log_path" ]]; then
 		found="$(grep -c '^found|' "$log_path" || true)"
 		install="$(grep -c '^install|' "$log_path" || true)"
@@ -521,6 +521,9 @@ devsetup_summary() {
 		warn="$(grep -c '^warn|' "$log_path" || true)"
 		update="$(grep -c '^update|' "$log_path" || true)"
 		remove="$(grep -c '^remove|' "$log_path" || true)"
+		if grep -Fq 'refusing to modify shared prefix ' "$log_path"; then
+			shared_prefix_blocked=1
+		fi
 	fi
 	warn_label="warnings"
 	[[ "$warn" -eq 1 ]] && warn_label="warning"
@@ -555,6 +558,12 @@ devsetup_summary() {
 		if [[ "$warn" -gt 0 ]]; then
 			echo "$warn item(s) need attention regardless (see [warn] lines above)."
 		fi
+	fi
+
+	if [[ "$shared_prefix_blocked" -eq 1 ]]; then
+		echo
+		echo "Recommendation: if authorized to modify the shared Homebrew prefix, rerun in explicit admin mode from a permitted non-root account:"
+		echo "  DEVSETUP_ADMIN_MODE=1 $apply_command"
 	fi
 }
 

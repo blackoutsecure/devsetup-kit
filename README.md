@@ -135,6 +135,10 @@ On macOS/Linux:
 DEVSETUP_ADMIN_MODE=1 ./setup.sh
 ```
 
+If setup skips tools because the shared Homebrew prefix is protected, its final
+summary prints this opt-in command. Use it only when you are authorized to modify that
+prefix; run from a permitted non-root account.
+
 The override **does not grant permissions**, start an elevated shell, widen WinGet scope,
 enable casks, or make Homebrew support root. All existing per-user destinations and safety
 checks remain in place. Running children as admin is reported explicitly when the parent

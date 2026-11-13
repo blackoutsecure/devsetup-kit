@@ -326,6 +326,22 @@ devsetup_summary "$HOME/status" 1 './setup.sh --uninstall'
             self.assertIn("Fixture: would uninstall fixture", output)
             self.assertIn("Run this to apply them: ./setup.sh --uninstall", output)
 
+    def test_summary_recommends_admin_mode_only_for_shared_prefix_skips(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.run_harness(Path(temporary), r"""
+. "$REAL_CONFIG"
+printf 'skip|Fixture|user.install.fixture is false\n' > "$HOME/status"
+devsetup_summary "$HOME/status" 0 > "$HOME/ordinary-skip"
+printf 'skip|Fixture|refusing to modify shared prefix /opt/homebrew in standard-user mode\n' > "$HOME/status"
+devsetup_summary "$HOME/status" 0 './setup.sh --skip-settings-sync'
+cat "$HOME/ordinary-skip"
+""")
+            self.assertEqual(output.count("DEVSETUP_ADMIN_MODE=1"), 1)
+            self.assertIn(
+                "DEVSETUP_ADMIN_MODE=1 ./setup.sh --skip-settings-sync", output
+            )
+            self.assertIn("permitted non-root account", output)
+
     def test_every_unix_application_rejects_root_before_tool_configuration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
