@@ -96,6 +96,9 @@ elif [[ $audit -eq 1 ]]; then
 else
 	command_path="$(devsetup_install_via_homebrew PowerShell "$formula" pwsh \
 		"Install it from https://learn.microsoft.com/powershell/." 0 1 0)"
+	if [[ -z "$command_path" ]]; then
+		exit 0
+	fi
 	installed="$(powershell_version "$command_path")"
 fi
 
@@ -120,6 +123,9 @@ if [[ -n "$latest" ]]; then
 			if ! devsetup_activate_homebrew; then
 				devsetup_status warn PowerShell "upgrade requires an existing user-local Homebrew formula; existing installations are preserved" >&2
 				exit 1
+			fi
+			if devsetup_skip_if_homebrew_write_blocked PowerShell 1; then
+				exit 0
 			fi
 			devsetup_assert_homebrew_write
 			if ! brew list --formula --versions "$formula" >/dev/null 2>&1; then

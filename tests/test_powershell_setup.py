@@ -450,10 +450,23 @@ bash "$FIXTURE_SCRIPT" "$@"
             with self.subTest(marker=marker):
                 path = self.root / marker
                 path.touch()
-                result = self.run_installer("--upgrade", success=False)
-                self.assertIn("[warn]", result.stderr)
+                result = self.run_installer(
+                    "--upgrade", success=marker == "global-prefix"
+                )
+                if marker == "global-prefix":
+                    self.assertIn("[skip]", result.stderr)
+                else:
+                    self.assertIn("[warn]", result.stderr)
                 self.assertFalse((self.root / "upgrades").exists())
                 path.unlink()
+
+    def test_missing_install_skips_shared_homebrew_without_polluting_print_path(self):
+        (self.root / "no-pwsh").touch()
+        (self.root / "global-prefix").touch()
+        result = self.run_installer("--print-path")
+        self.assertEqual(result.stdout, "")
+        self.assertIn("[skip]", result.stderr)
+        self.assertFalse((self.root / "upgrades").exists())
 
     def test_release_and_upgrade_failures_are_not_success(self):
         (self.root / "network-failure").touch()

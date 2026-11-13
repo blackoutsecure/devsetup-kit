@@ -690,6 +690,48 @@ bash "$FIXTURE_SCRIPT" "$@"
                 self.assertIn(str(proxy_bin), (root / ".profile").read_text())
                 self.assertNotIn("[install]", run())
 
+    @unittest.skipUnless(BASH, "Bash is required")
+    def test_bash_audit_skips_rust_when_shared_homebrew_prefix_is_blocked(self):
+        if os.name != "nt" and os.geteuid() == 0:
+            self.skipTest("Run the Homebrew policy test as a non-root user")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scripts = root / "src" / "scripts"
+            scripts.mkdir(parents=True)
+            shutil.copyfile(ROOT / "src" / "scripts" / "install-rust.sh", scripts / "install-rust.sh")
+            (root / "src" / "config.sh").write_text("""
+. "$REAL_CONFIG"
+devsetup_is_elevated() { return 1; }
+devsetup_homebrew_path() { printf '%s\\n' "$HOME/bin/brew"; }
+devsetup_activate_homebrew() { return 0; }
+command() {
+    if [[ "$1" == -v && "$2" == rustup ]]; then return 1; fi
+    builtin command "$@"
+}
+""", encoding="utf-8")
+            (root / "bin").mkdir()
+            brew = root / "bin" / "brew"
+            brew.write_text("""#!/usr/bin/env bash
+if [[ "$1" == --prefix ]]; then dirname "$HOME"; else exit 2; fi
+""", encoding="utf-8")
+            brew.chmod(0o755)
+            env = {
+                **os.environ,
+                "HOME": str(root),
+                "NO_COLOR": "1",
+                "PATH": str(root / "bin") + os.pathsep + os.environ.get("PATH", ""),
+                "REAL_CONFIG": str(ROOT / "src" / "config.sh"),
+            }
+            result = subprocess.run(
+                [BASH, str(scripts / "install-rust.sh"), "--audit"],
+                cwd=root, env=env, capture_output=True, text=True, timeout=30, check=False,
+            )
+            output = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, output)
+            self.assertRegex(output, r"\[skip\]\s+Rust\s+refusing to modify shared prefix")
+            self.assertRegex(output, r"\[skip\]\s+Rust build\s+stable Rust is unavailable")
+            self.assertNotIn("would install stable", output)
+
     def test_all_entrypoint_modes_are_wired(self):
         for name, installer in (("setup.ps1", "install-rust.ps1"), ("setup.sh", "install-rust.sh")):
             text = (ROOT / name).read_text()

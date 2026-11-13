@@ -88,6 +88,10 @@ standalone installers, and the Python applier reject elevated write runs by defa
 system-installed tools can be reused without elevation; they do not need to be reinstalled.
 On Unix, audit reports a shared Homebrew prefix as blocked when standard-user
 setup would refuse to modify it. Existing Git credential helpers are preserved.
+When an installation would require writing to a shared Homebrew prefix, that component is
+reported as `[skip]` with the policy reason and later independent setup steps continue. The
+tool remains unavailable until you use a user-local Homebrew installation or deliberately
+opt in to shared-prefix writes with `DEVSETUP_ADMIN_MODE=1`.
 
 Setup never closes or reloads VS Code, terminates existing terminal sessions, or restarts
 WSL as part of its default flow. It prints manual restart guidance in the terminal after
@@ -333,7 +337,7 @@ The same vocabulary is used during a real run:
 | ----------- | ------------------------------------------------------------------------------------------------------------ |
 | `[found]`   | Already present and correct. Nothing was done.                                                               |
 | `[install]` | Something was changed or installed.                                                                          |
-| `[skip]`    | Disabled in config, or not applicable on this platform.                                                      |
+| `[skip]`    | Disabled, not applicable on this platform, or blocked by a safety policy such as a shared Homebrew prefix. |
 | `[warn]`    | Continued, but the result is degraded or needs your attention.                                               |
 | `[update]`  | A newer version is available. Reports installed/latest versions when known, but never applies automatically. |
 | `[remove]`  | Uninstalled. Only ever appears with `-Uninstall` / `--uninstall`.                                            |

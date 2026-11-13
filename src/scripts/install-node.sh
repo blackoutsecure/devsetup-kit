@@ -52,6 +52,9 @@ fi
 
 case "$os" in
 	Darwin|Linux)
+		if devsetup_skip_if_homebrew_write_blocked Node.js; then
+			exit 0
+		fi
 		if ! devsetup_ensure_homebrew; then
 			printf 'Node.js/npm unavailable and Homebrew could not be installed. Install Node.js LTS from https://nodejs.org/.\n' >&2
 			exit 1

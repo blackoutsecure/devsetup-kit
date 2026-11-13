@@ -238,12 +238,34 @@ devsetup_activate_homebrew() {
 devsetup_audit_homebrew_install() {
 	local component="$1" formula="$2" problem
 	if devsetup_homebrew_path >/dev/null 2>&1; then
+		if devsetup_skip_if_homebrew_write_blocked "$component"; then
+			return 0
+		fi
 		if ! problem="$(devsetup_activate_homebrew && devsetup_homebrew_write_problem 2>&1)"; then
 			devsetup_status warn "$component" "cannot install '$formula': ${problem:-Homebrew could not be activated}"
 			return 1
 		fi
 	fi
 	devsetup_status install "$component" "would install '$formula' via Homebrew"
+}
+
+devsetup_skip_if_homebrew_write_blocked() {
+	local component="$1" print_path="${2:-0}" problem
+	devsetup_activate_homebrew || return 1
+	if problem="$(devsetup_homebrew_write_problem 2>&1)"; then
+		return 1
+	fi
+	case "$problem" in
+		"refusing to modify shared prefix "*)
+			if [[ "$print_path" -eq 1 ]]; then
+				devsetup_status skip "$component" "$problem" >&2
+			else
+				devsetup_status skip "$component" "$problem"
+			fi
+			return 0
+			;;
+	esac
+	return 1
 }
 
 devsetup_persist_homebrew_shellenv() {
@@ -358,6 +380,9 @@ devsetup_install_via_homebrew() {
 			printf '%s setup is unsupported on %s.\n' "$component" "$os" >&2
 			return 1
 		fi
+		if devsetup_skip_if_homebrew_write_blocked "$component" "$print_path"; then
+			return 0
+		fi
 		if ! devsetup_ensure_homebrew; then
 			printf '%s is unavailable and Homebrew could not be installed. %s\n' "$component" "$manual_hint" >&2
 			return 1
@@ -442,7 +467,7 @@ devsetup_uninstall_via_homebrew() {
 # One audit line per component so a run reads as a report.
 #   found   - already present, nothing to do
 #   install - something is about to change
-#   skip    - disabled in config, or not applicable on this platform
+#   skip    - disabled, not applicable, or blocked by a safety policy
 #   warn    - proceeded, but the result is degraded
 #   update  - a newer version is available (reported only, never applied automatically)
 #   remove  - uninstalled, only reachable via --uninstall

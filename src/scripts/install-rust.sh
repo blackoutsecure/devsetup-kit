@@ -58,11 +58,18 @@ devsetup_status found "Rust homes" "Cargo: ${CARGO_HOME:-$HOME/.cargo}; rustup: 
 rustup="$(devsetup_rust_tool_path rustup || true)"
 if [[ -z "$rustup" ]]; then
 	if [[ $audit -eq 1 ]]; then
+		if devsetup_skip_if_homebrew_write_blocked Rust; then
+			devsetup_status skip "Rust build" "stable Rust is unavailable because shared Homebrew writes are blocked"
+			exit 0
+		fi
 		if devsetup_audit_homebrew_install Rust "$formula"; then
 			devsetup_status install Rust "would install stable with $selection"
 			devsetup_status install "Rust PATH" "would add Rust tools to the login shell profile after installation"
 		fi
 		devsetup_status skip "Rust build" "linker readiness is unverified; audit does not compile or run code"
+		exit 0
+	fi
+	if devsetup_skip_if_homebrew_write_blocked Rust; then
 		exit 0
 	fi
 	devsetup_ensure_homebrew

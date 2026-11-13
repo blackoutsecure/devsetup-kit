@@ -389,7 +389,7 @@ devsetup_homebrew_path() { printf '%s\n' "$HOME/bin/brew"; }
 devsetup_activate_homebrew() { return 0; }
 fixture_prefix="$(dirname "$HOME")"
 brew() { [[ "$*" == --prefix ]]; printf '%s\n' "$fixture_prefix"; }
-if devsetup_audit_homebrew_install Fixture fixture; then exit 1; fi
+devsetup_audit_homebrew_install Fixture fixture
 devsetup_uninstall_via_homebrew Fixture fixture 1
 export DEVSETUP_ADMIN_MODE=1
 devsetup_audit_homebrew_install Fixture fixture
@@ -400,10 +400,34 @@ devsetup_audit_homebrew_install Fixture fixture
 echo 'PASS: audit reflects prefix policy'
 """)
             self.assertIn("[warn]", output)
-            self.assertIn("cannot install 'fixture': refusing to modify shared prefix", output)
+            self.assertIn("[skip]", output)
+            self.assertIn("[skip]    Fixture  refusing to modify shared prefix", output)
             self.assertIn("cannot uninstall 'fixture': refusing to modify shared prefix", output)
             self.assertEqual(output.count("would install 'fixture'"), 2)
             self.assertIn("PASS: audit reflects prefix policy", output)
+
+    def test_homebrew_install_skips_shared_prefix_without_running_brew_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = self.run_harness(root, r"""
+. "$REAL_CONFIG"
+devsetup_is_elevated() { return 1; }
+devsetup_activate_homebrew() { return 0; }
+fixture_prefix="$(dirname "$HOME")"
+brew() {
+    if [[ "$*" == --prefix ]]; then printf '%s\n' "$fixture_prefix"; return 0; fi
+    echo "unexpected brew command: $*" >&2
+    exit 1
+}
+DEVSETUP_STATUS_LOG="$HOME/status"
+export DEVSETUP_STATUS_LOG
+devsetup_install_via_homebrew Fixture fixture fixture-tool fixture 0
+grep -q '^skip|Fixture|refusing to modify shared prefix' "$DEVSETUP_STATUS_LOG"
+! grep -q '^warn|Fixture|' "$DEVSETUP_STATUS_LOG"
+echo 'PASS: shared-prefix install safely skipped'
+""")
+            self.assertIn("[skip]", output)
+            self.assertIn("PASS: shared-prefix install safely skipped", output)
 
     def test_homebrew_audit_apply_second_run_and_formula_only_install(self):
         with tempfile.TemporaryDirectory() as temporary:

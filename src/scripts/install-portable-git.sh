@@ -112,6 +112,9 @@ if [[ $git_present -eq 0 ]]; then
 			exit 1
 			;;
 		Linux)
+			if devsetup_skip_if_homebrew_write_blocked Git; then
+				exit 0
+			fi
 			devsetup_status install Git "installing '$formula' via Homebrew (live output below, may take a few minutes)"
 			if ! devsetup_ensure_homebrew; then
 				printf 'Git is unavailable and Homebrew could not be installed.\n' >&2
