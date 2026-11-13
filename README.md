@@ -17,6 +17,7 @@ it, reporting each decision in the terminal. Nothing requires WSL, sudo, or a GU
 - **Audit first.** `setup.ps1 -Audit` / `setup.sh --audit` reports what would change and writes nothing.
 - **One config.** Every tunable lives in [`config/dev-setup.config.json`](config/dev-setup.config.json).
 - **Copilot auto-keep.** Pending edits are automatically kept after one second, with a configurable delay or manual-review opt-out.
+- **Fusion Standard preference.** New chats prefer Auto/Fusion with the Standard tier where available; organization-managed defaults and model availability still apply.
 - **Idempotent.** Re-running is safe; values are compared before they are written.
 - **Color-coded.** Each line is tagged `[found]` (green), `[install]` (cyan), `[warn]` (yellow), or
   `[skip]` (grey) — identically across PowerShell, bash, and the Python VS Code applier. Colors are
@@ -1185,14 +1186,14 @@ reviewed build. Terminal settings cannot force SDK shell output into the main pa
 select the Local harness when integrated-terminal interaction is more important than the
 Copilot harness. Instructions require the agent to disclose this limitation.
 
-Autopilot/Allow All and Fusion are explicit opt-ins for a personal copy of the config:
+Fusion Standard is the default preference. Autopilot/Allow All remains an explicit opt-in:
 
 ```json
 {
     "user": {
         "vscode": {
             "copilot": {
-                "autopilot": true,
+                "autopilot": false,
                 "fusion": true
             }
         }
@@ -1201,10 +1202,25 @@ Autopilot/Allow All and Fusion are explicit opt-ins for a personal copy of the c
 ```
 
 Merge those keys into the existing config; do not replace the file with this fragment.
-Both default to `false` so the kit does not grant unattended permissions or enable
-experimental model routing for every user. Fusion presents Auto as Fusion; `balance` is
-its Standard tier. Changing Fusion settings may restart the **Copilot runtime**, not the
-VS Code application. Settings under `user.vscode.settings` still win over these presets.
+The Fusion preset writes `chat.defaultModel: "auto"` and
+`github.copilot.chat.autoModeTierOverride: "balance"` (Standard when Auto is Fusion).
+It also writes the compatibility flags `chat.copilot.ensemble.enabled: true` and
+`chat.copilot.hydraFusion.enabled: "v2"` for builds that recognize them. Newer builds
+may no longer expose those flags; account/service availability determines whether Auto
+offers Fusion. Writing them does not prove that Fusion is active or unlock unavailable models.
+Set `user.vscode.copilot.fusion` to `false` to stop applying the preset; existing profile
+settings are not removed automatically. Settings under `user.vscode.settings` still win
+over these presets, including the shipped Auto/Standard values.
+
+An organization-managed model default takes precedence over the saved personal preference.
+The kit does not bypass enforced policy, change organization settings, or guarantee a personal
+default will win. Where policy permits it, choose Fusion/Standard in an individual conversation.
+Confirm the effective model and tier in a new chat's model picker. Changing Fusion settings
+may restart the **Copilot runtime**, not the VS Code application.
+The settings are eligible for the existing post-validation Settings Sync handoff;
+verify the remote values with **Settings Sync: Show Synced Data**, not just a local file.
+On macOS, CLI discovery supports both `bin/code-insiders` and `bin/code` inside the
+Insiders application bundle, without substituting the Stable CLI for Insiders.
 Autopilot/Allow All grants broad tool access; it is not permission to restart the editor
 or terminate a user's terminals. New-conversation defaults do not rewrite a running chat.
 

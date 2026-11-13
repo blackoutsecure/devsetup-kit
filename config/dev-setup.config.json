@@ -50,7 +50,7 @@
             "copilot": {
                 "autoAcceptDelay": 1,
                 "autopilot": false,
-                "fusion": false
+                "fusion": true
             },
             "terminalInstructions": {
                 "manage": true
@@ -408,7 +408,9 @@
                 "insiders": {
                     "macos": [
                         "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
-                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"
+                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
+                        "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code",
+                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code"
                     ],
                     "linux": [
                         "/usr/share/code-insiders/bin/code-insiders",

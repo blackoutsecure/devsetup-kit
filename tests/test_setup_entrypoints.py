@@ -115,6 +115,10 @@ class SetupEntrypointTests(unittest.TestCase):
             self.assertEqual(settings["chat.tools.terminal.outputLocation"], "terminal")
             self.assertTrue(settings["chat.sessionSync.enabled"])
             self.assertTrue(settings["github.copilot.chat.localIndex.enabled"])
+            self.assertTrue(settings["chat.copilot.ensemble.enabled"])
+            self.assertEqual(settings["chat.copilot.hydraFusion.enabled"], "v2")
+            self.assertEqual(settings["chat.defaultModel"], "auto")
+            self.assertEqual(settings["github.copilot.chat.autoModeTierOverride"], "balance")
             self.assertTrue(
                 (profile / "prompts" / "terminal-execution.instructions.md").is_file()
             )

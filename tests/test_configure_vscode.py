@@ -54,6 +54,18 @@ class RustSettingsTests(unittest.TestCase):
                     configure_vscode.validate_profiles({}, rust_settings, None)
 
 
+class CodeCliDiscoveryTests(unittest.TestCase):
+    def test_insiders_finds_renamed_mac_cli_without_using_stable(self):
+        config = configure_vscode.load_json(configure_vscode.DEFAULT_CONFIG)
+        cli = "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code"
+        with (
+            patch("configure_vscode.shutil.which", return_value=None),
+            patch("configure_vscode.platform.system", return_value="Darwin"),
+            patch("configure_vscode.os.access", side_effect=lambda path, mode: path == cli),
+        ):
+            self.assertEqual(configure_vscode.find_code_cli(config, "insiders", "code-insiders"), cli)
+
+
 class CopilotMcpConfigTests(unittest.TestCase):
     def test_uses_copilot_home_when_configured(self):
         with patch.dict(os.environ, {"COPILOT_HOME": "~/copilot-home"}):
@@ -343,25 +355,40 @@ class DefaultSettingsTests(unittest.TestCase):
         self.assertFalse(settings["agents.voice.enabled"])
         self.assertEqual(settings["window.confirmBeforeClose"], "always")
 
-    def test_unattended_permissions_and_fusion_are_opt_in(self):
+    def test_fusion_standard_is_default_without_unattended_permissions(self):
         self.assertNotIn("chat.defaultConfiguration", self.settings())
-        self.assertNotIn("chat.copilot.ensemble.enabled", self.settings())
-        self.config["user"]["vscode"]["copilot"] = {"autopilot": True, "fusion": True}
+        self.assertNotIn("chat.permissions.default", self.settings())
+        self.assertTrue(self.config["user"]["vscode"]["copilot"]["fusion"])
+        self.config["user"]["vscode"]["copilot"].pop("fusion")
+        for key in ("chat.defaultModel", "github.copilot.chat.autoModeTierOverride"):
+            self.config["user"]["vscode"]["settings"].pop(key)
+        settings = self.settings()
+        self.assertTrue(settings["chat.copilot.ensemble.enabled"])
+        self.assertEqual(settings["chat.copilot.hydraFusion.enabled"], "v2")
+        self.assertEqual(settings["chat.defaultModel"], "auto")
+        self.assertEqual(settings["github.copilot.chat.autoModeTierOverride"], "balance")
+
+    def test_fusion_can_be_opted_out_independently_of_autopilot(self):
+        self.config["user"]["vscode"]["copilot"] = {"autopilot": True, "fusion": False}
         settings = self.settings()
         self.assertEqual(
             settings["chat.defaultConfiguration"],
             {"mode": "autopilot", "approvals": "allowAll"},
         )
         self.assertEqual(settings["chat.permissions.default"], "autopilot")
-        self.assertTrue(settings["chat.copilot.ensemble.enabled"])
-        self.assertEqual(settings["chat.copilot.hydraFusion.enabled"], "v2")
-        self.assertEqual(settings["github.copilot.chat.autoModeTierOverride"], "balance")
-        self.assertEqual(settings["chat.defaultModel"], "auto")
+        self.assertNotIn("chat.copilot.ensemble.enabled", settings)
+        self.assertNotIn("chat.copilot.hydraFusion.enabled", settings)
 
     def test_user_settings_override_opt_in_presets(self):
         self.config["user"]["vscode"]["copilot"]["autopilot"] = True
         self.config["user"]["vscode"]["settings"]["chat.permissions.default"] = "default"
+        self.config["user"]["vscode"]["settings"]["chat.defaultModel"] = "opus"
+        self.config["user"]["vscode"]["settings"]["github.copilot.chat.autoModeTierOverride"] = "intelligence"
+        self.config["user"]["vscode"]["settings"]["chat.copilot.ensemble.enabled"] = False
         self.assertEqual(self.settings()["chat.permissions.default"], "default")
+        self.assertEqual(self.settings()["chat.defaultModel"], "opus")
+        self.assertEqual(self.settings()["github.copilot.chat.autoModeTierOverride"], "intelligence")
+        self.assertFalse(self.settings()["chat.copilot.ensemble.enabled"])
 
     def test_non_root_devcontainer_and_no_global_python_installs(self):
         self.assertEqual(self.config["user"]["devcontainers"]["remoteUser"], "vscode")
@@ -396,7 +423,6 @@ class CopilotAutoKeepTests(unittest.TestCase):
         )
         self.assertNotIn("chat.permissions.default", settings)
         self.assertNotIn("chat.defaultConfiguration", settings)
-        self.assertNotIn("chat.copilot.ensemble.enabled", settings)
 
     def test_missing_null_or_blank_delay_defaults_to_one_second(self):
         for copilot in ({}, {"autoAcceptDelay": None}, {"autoAcceptDelay": ""}):

@@ -272,9 +272,11 @@ def build_settings(
             "mode": "autopilot",
             "approvals": "allowAll",
         }
-    if get(config, "user.vscode.copilot.fusion", False):
+    if get(config, "user.vscode.copilot.fusion", True):
         settings["chat.copilot.ensemble.enabled"] = True
         settings["chat.copilot.hydraFusion.enabled"] = "v2"
+        settings["chat.defaultModel"] = "auto"
+        settings["github.copilot.chat.autoModeTierOverride"] = "balance"
     # User overrides win over everything above.
     settings.update(get(config, "user.vscode.settings", {}))
     return settings
