@@ -31,6 +31,10 @@ DEFAULT_CONFIG = REPO_ROOT / "config" / "dev-setup.config.json"
 
 OS_KEYS = {"Windows": "windows", "Darwin": "macos"}
 COPILOT_MCP_FIELDS = {"type", "command", "args", "env", "url", "headers", "tools"}
+CUSTOMIZATION_MANAGEMENT_KEYS = (
+    "user.install.vscodeSettings", "user.install.mcpServers", "user.mcp.manage",
+    "user.mcp.copilotConfig.manage", "user.vscode.terminalInstructions.manage",
+)
 VSCODE_MCP_VARIABLE = re.compile(
     r"\$\{(?:input|config|command|env):"
     r"|\$\{(?:workspaceFolder|workspaceRoot|workspaceFolderBasename|"
@@ -655,6 +659,74 @@ def profile_mcp_servers(servers: dict, user_dir: Path) -> dict:
     return {name: server for name, server in servers.items() if name not in migrated}
 
 
+def review_agent_customizations(config: dict) -> int:
+    """Inventory current legacy sources without moving or trusting customizations."""
+    filename = get(config, "advanced.vscode.mcpFileName", "mcp.json")
+    validate_profile_filename(filename, "advanced.vscode.mcpFileName")
+    compatible = copilot_mcp_servers(config)
+    disabled = [key for key in CUSTOMIZATION_MANAGEMENT_KEYS if not get(config, key, True)]
+    if disabled:
+        status("skip", "migrations", f"kit migration disabled by {', '.join(disabled)}; inventory only")
+
+    profiles_found = 0
+    for profile, user_dir in profile_targets(config):
+        if not user_dir.is_dir():
+            status("skip", "migrations", f"{profile}: configured profile unavailable")
+            continue
+        profiles_found += 1
+        source_mcp = user_dir / filename
+        source = load_json(source_mcp)
+        if not isinstance(source, dict) or not isinstance(source.get("servers", {}), dict):
+            raise SystemExit(f"{source_mcp} must contain a servers object.")
+        kit_count = 0
+        native_count = 0
+        for name, definition in sorted(source.get("servers", {}).items()):
+            managed = (
+                not disabled and not source_mcp.is_symlink()
+                and name in compatible and copilot_mcp_server(definition) is not None
+            )
+            kit_count += int(managed)
+            native_count += int(not managed)
+            label = "kit migration candidate" if managed else "native review"
+            status("found", "migrations", f"{profile}: MCP {name}: {label}")
+
+        prompts = user_dir / "prompts"
+        terminal = prompts / "terminal-execution.instructions.md"
+        for path in sorted(prompts.rglob("*")):
+            if not path.is_file() or not (
+                path.name == "SKILL.md"
+                or path.name.endswith((".instructions.md", ".prompt.md", ".agent.md", ".chatmode.md"))
+            ):
+                continue
+            managed = not disabled and path == terminal and not path.is_symlink()
+            kit_count += int(managed)
+            native_count += int(not managed)
+            label = "kit migration candidate" if managed else "native review"
+            status("found", "migrations", f"{profile}: {path.relative_to(prompts)}: {label}")
+
+        status(
+            "found", "migrations",
+            f"{profile}: {kit_count} kit candidate(s), {native_count} native review item(s)",
+        )
+        if kit_count:
+            status(
+                "skip", "migrations",
+                f"{profile}: audit with --agent-customization-migration {profile} --dry-run; "
+                "candidates still require target-conflict validation before applying",
+            )
+    if not profiles_found:
+        status("skip", "migrations", "Not Assessed: no existing configured VS Code profile")
+        return 1
+    status(
+        "skip", "migrations",
+        "Read-only source snapshot; reopen Copilot Chat's Review Migrations / "
+        "Agent Customizations > Migrations for the authoritative runtime-specific list. "
+        "Workspace, extension and other customization sources remain native-only; "
+        "no files, trust, plugins or session history changed.",
+    )
+    return 0
+
+
 def migration_file_bytes(path: Path) -> bytes | None:
     if path.is_symlink():
         raise SystemExit(f"Refusing to migrate a symbolic-link file: {path}")
@@ -680,10 +752,7 @@ def write_migration_bytes(path: Path, content: bytes, expected: bytes | None) ->
 
 def migrate_agent_customizations(config: dict, profile: str, dry_run: bool) -> int:
     """Move supported user customizations, retaining private recovery copies."""
-    for key in (
-        "user.install.vscodeSettings", "user.install.mcpServers", "user.mcp.manage",
-        "user.mcp.copilotConfig.manage", "user.vscode.terminalInstructions.manage",
-    ):
+    for key in CUSTOMIZATION_MANAGEMENT_KEYS:
         if not get(config, key, True):
             status("skip", "migrations", f"Not Assessed: {key} is disabled")
             return 1
@@ -1391,6 +1460,11 @@ def main() -> int:
         "redacts server credentials and does not start servers or update plugins",
     )
     parser.add_argument(
+        "--review-migrations", action="store_true",
+        help="read-only, current-profile MCP and prompt-file migration inventory; "
+        "distinguishes kit candidates from native Review Migrations items",
+    )
+    parser.add_argument(
         "--copilot-chat-migration", action="store_true",
         help="prepare only configured Copilot session-sync preferences and show "
         "manual migration verification steps; may enable history uploads; "
@@ -1408,10 +1482,14 @@ def main() -> int:
     )
     args = parser.parse_args()
     if sum(bool(mode) for mode in (
-        args.support_audit, args.copilot_chat_migration, args.agent_customization_migration
+        args.support_audit, args.review_migrations,
+        args.copilot_chat_migration, args.agent_customization_migration,
     )) > 1:
-        parser.error("choose support audit, session-sync preparation or customization migration, not multiple modes")
-    enforce_execution_mode(args.dry_run or args.support_audit)
+        parser.error(
+            "choose support audit, migration review, session-sync preparation "
+            "or customization migration, not multiple modes"
+        )
+    enforce_execution_mode(args.dry_run or args.support_audit or args.review_migrations)
 
     config = load_json(args.config)
     if not config:
@@ -1419,6 +1497,8 @@ def main() -> int:
 
     if args.support_audit:
         return audit_support(config)
+    if args.review_migrations:
+        return review_agent_customizations(config)
     if args.agent_customization_migration:
         return migrate_agent_customizations(
             config, args.agent_customization_migration, args.dry_run
@@ -1447,6 +1527,7 @@ def main() -> int:
     manage_mcp(config, args.dry_run)
     manage_copilot_mcp(config, args.dry_run)
     if validate_install(config, settings, snippet, args.dry_run):
+        review_agent_customizations(config)
         if args.skip_settings_sync:
             status("skip", "VS Code User Sync", "--skip-settings-sync was passed")
         else:

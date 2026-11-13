@@ -1298,6 +1298,30 @@ runtime upgrades or change the existing opt-in uninstall behavior.
 customizations that need new locations for the Copilot agent runtime. Enabling session
 sync does not clear that dashboard.
 
+Normal setup and its audit now include a read-only migration review. To refresh it
+independently without installing tools or applying settings:
+
+```powershell
+python .\src\configure-vscode.py --review-migrations
+```
+
+```bash
+python3 ./src/configure-vscode.py --review-migrations
+```
+
+The review discovers the current MCP definitions and instruction, prompt, agent,
+chat-mode and skill files under each existing configured profile's `prompts` directory.
+It lists kit-managed portable candidates separately from items requiring native review,
+without printing server credentials or instruction contents. Counts are recomputed
+on every run, including after native or kit migrations retire source items; nothing is
+automatically moved. Management opt-outs remain in force. A kit candidate still needs
+the migration audit below to validate target conflicts.
+
+Reopen Copilot Chat's **Review Migrations** / **Agent Customizations > Migrations**
+after changes: that runtime-specific view is authoritative. The source inventory does
+not claim the dashboard is clear or that a migration completed. Workspace, extension,
+hook and other customization sources remain native-only.
+
 For the kit's terminal instructions and configured portable MCP servers, use this
 separate opt-in process from the kit directory. Select one existing configured profile
 (`insiders` below, or `stable`); do not run both blindly because their instruction

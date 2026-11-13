@@ -22,6 +22,7 @@ Bash scripts must run on macOS's stock **bash 3.2** (`src/config.sh` says so and
 ./setup.sh --uninstall --audit              # preview removals; Git is never removed
 bash ./src/scripts/install-node.sh --audit  # any installer runs standalone
 python3 ./src/configure-vscode.py --dry-run
+python3 ./src/configure-vscode.py --review-migrations  # current sources, read-only
 python3 -m unittest discover -s tests -v
 
 ./manage-gpg-key.sh --audit
