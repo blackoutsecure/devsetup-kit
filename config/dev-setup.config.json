@@ -20,6 +20,7 @@
             "ripgrep": true,
             "busybox": true,
             "packer": true,
+            "terraform": true,
             "gpg": true,
             "vscodeSettings": true,
             "devcontainerDefaults": true,
@@ -50,7 +51,7 @@
             "copilot": {
                 "autoAcceptDelay": 1,
                 "autopilot": false,
-                "fusion": false
+                "fusion": true
             },
             "terminalInstructions": {
                 "manage": true
@@ -354,6 +355,14 @@
                 "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\packer.exe"
             ]
         },
+        "terraform": {
+            "homebrewFormula": "hashicorp/tap/terraform",
+            "wingetPackageId": "Hashicorp.Terraform",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\terraform.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\terraform.exe"
+            ]
+        },
         "gpg": {
             "homebrewFormula": "gnupg",
             "portableGitRelativePath": "usr\\bin\\gpg.exe",
@@ -408,7 +417,9 @@
                 "insiders": {
                     "macos": [
                         "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
-                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders"
+                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
+                        "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code",
+                        "$HOME/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code"
                     ],
                     "linux": [
                         "/usr/share/code-insiders/bin/code-insiders",

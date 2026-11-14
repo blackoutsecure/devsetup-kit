@@ -14,6 +14,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SetupEntrypointTests(unittest.TestCase):
+    def test_terraform_is_enabled_and_wired_in_all_modes(self):
+        config = json.loads((ROOT / "config" / "dev-setup.config.json").read_text())
+        self.assertTrue(config["user"]["install"]["terraform"])
+        self.assertEqual(config["advanced"]["terraform"]["homebrewFormula"], "hashicorp/tap/terraform")
+        self.assertEqual(config["advanced"]["terraform"]["wingetPackageId"], "Hashicorp.Terraform")
+        for name, installer in (
+            ("setup.ps1", "install-terraform.ps1"),
+            ("setup.sh", "install-terraform.sh"),
+        ):
+            text = (ROOT / name).read_text()
+            self.assertEqual(text.count(installer), 3)
+            self.assertEqual(text.count("user.install.terraform is false"), 3)
+
     def test_github_cli_is_wired_in_all_modes_without_admin_controls(self):
         config = json.loads((ROOT / "config" / "dev-setup.config.json").read_text())
         self.assertTrue(config["user"]["install"]["githubCli"])
@@ -115,6 +128,10 @@ class SetupEntrypointTests(unittest.TestCase):
             self.assertEqual(settings["chat.tools.terminal.outputLocation"], "terminal")
             self.assertTrue(settings["chat.sessionSync.enabled"])
             self.assertTrue(settings["github.copilot.chat.localIndex.enabled"])
+            self.assertTrue(settings["chat.copilot.ensemble.enabled"])
+            self.assertEqual(settings["chat.copilot.hydraFusion.enabled"], "v2")
+            self.assertEqual(settings["chat.defaultModel"], "auto")
+            self.assertEqual(settings["github.copilot.chat.autoModeTierOverride"], "balance")
             self.assertTrue(
                 (profile / "prompts" / "terminal-execution.instructions.md").is_file()
             )

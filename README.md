@@ -8,7 +8,7 @@ tool configuration or the existing setup/audit commands.
 
 Cross-platform developer environment setup for machines **without local admin rights**.
 
-Installs Git, GitHub CLI, Node.js, Prettier, Python, Rust/Cargo, Dioxus CLI (`dx`), PHP, PowerShell, ShellCheck, ripgrep, Packer, and GPG
+Installs Git, GitHub CLI, Node.js, Prettier, Python, Rust/Cargo, Dioxus CLI (`dx`), PHP, PowerShell, ShellCheck, ripgrep, Packer, Terraform, and GPG
 per-user, plus BusyBox on Windows, then applies VS Code settings and portable Copilot MCP defaults.
 VS Code profile settings can follow you through Settings Sync; Copilot's separate global MCP
 config is not covered by Settings Sync. Every step auto-detects what is already present and skips
@@ -17,6 +17,7 @@ it, reporting each decision in the terminal. Nothing requires WSL, sudo, or a GU
 - **Audit first.** `setup.ps1 -Audit` / `setup.sh --audit` reports what would change and writes nothing.
 - **One config.** Every tunable lives in [`config/dev-setup.config.json`](config/dev-setup.config.json).
 - **Copilot auto-keep.** Pending edits are automatically kept after one second, with a configurable delay or manual-review opt-out.
+- **Fusion Standard preference.** New chats prefer Auto/Fusion with the Standard tier where available; organization-managed defaults and model availability still apply.
 - **Idempotent.** Re-running is safe; values are compared before they are written.
 - **Color-coded.** Each line is tagged `[found]` (green), `[install]` (cyan), `[warn]` (yellow), or
   `[skip]` (grey) — identically across PowerShell, bash, and the Python VS Code applier. Colors are
@@ -26,13 +27,13 @@ it, reporting each decision in the terminal. Nothing requires WSL, sudo, or a GU
 
 Platform requirements:
 
-- **Windows:** PowerShell 5.1+. WinGet for PHP, ShellCheck, ripgrep, BusyBox, and Packer.
+- **Windows:** PowerShell 5.1+. WinGet for PHP, ShellCheck, ripgrep, BusyBox, Packer, and Terraform.
   Official portable ZIP fallbacks for GitHub CLI, Node.js, and PowerShell; `uv` fallback for Python.
   Rust uses user-scoped WinGet or the official verified rustup installer. Prettier uses npm.
 - **macOS:** Xcode Command Line Tools for Git. Homebrew for GitHub CLI, Node.js, PHP, PowerShell,
-  ShellCheck, ripgrep, Packer, and GPG. Prettier uses npm.
+  ShellCheck, ripgrep, Packer, Terraform, and GPG. Prettier uses npm.
 - **Ubuntu / Debian:** Homebrew is installed under `$HOME` automatically if missing;
-  used for Git, GitHub CLI, Node.js, PHP, PowerShell, ShellCheck, ripgrep, Packer, and GPG.
+  used for Git, GitHub CLI, Node.js, PHP, PowerShell, ShellCheck, ripgrep, Packer, Terraform, and GPG.
   Prettier uses npm.
 
 No administrator or root access is required by the primary setup flow. WSL is never installed or invoked by `setup.ps1`.
@@ -112,7 +113,7 @@ made non-admin by setting an environment variable; open a normal terminal instea
 | GitHub CLI, Node.js, PowerShell | User-scoped WinGet or verified user-local ZIPs on Windows; Homebrew formulas on Unix. |
 | Python and uv | User-scoped WinGet or user-local uv/CPython; project virtual environments remain the default. |
 | Rust, Cargo, rustup | Current-user toolchains, components, and `PATH`; no automatic system linker installation. |
-| PHP, ShellCheck, ripgrep, BusyBox, Packer | User-scoped WinGet; supported Unix tools use Homebrew formulas. BusyBox is only detected on Unix. |
+| PHP, ShellCheck, ripgrep, BusyBox, Packer, Terraform | User-scoped WinGet; supported Unix tools use Homebrew formulas. BusyBox is only detected on Unix. |
 | Prettier and npm | User-owned npm global prefix rather than the system Node.js installation directory. |
 | Homebrew | New installations stay under the home directory; shared-prefix writes require the explicit override below. Root execution remains unsupported. |
 | VS Code, extensions, MCP servers | Current-user profiles and CLI processes; no administrator launch options are added. |
@@ -201,6 +202,16 @@ appliance OVA. Windows uses WinGet (`Hashicorp.Packer`); macOS and Linux use Has
 Homebrew tap (`hashicorp/tap/packer`), because Packer is no longer in homebrew-core. The
 `hashicorp.hcl` extension joins the synced VS Code baseline for `.pkr.hcl` syntax support.
 Set `user.install.packer` to `false` to skip the CLI.
+
+Terraform is installed by default using WinGet (`Hashicorp.Terraform`) on Windows or
+HashiCorp's Homebrew tap (`hashicorp/tap/terraform`) on macOS and Linux. Set
+`user.install.terraform` to `false` to skip it. The kit detects an existing version and
+otherwise installs the package manager's current version; it does not pin or replace it.
+Individual repositories may require a specific version: for example, bos-infra-toolkit
+requires Terraform 1.16.5 for local validation and saved-plan operations, so a newer
+package is not sufficient. Check `terraform version` and use the exact version from
+the [official Terraform releases](https://releases.hashicorp.com/terraform/) separately,
+with its executable first on `PATH`, before working there.
 
 Prettier is installed by default as a user-level npm global so `prettier --check .`
 works in any repository, including before a repository's own dependencies are installed.
@@ -302,7 +313,7 @@ it, the installed and latest versions. They never apply upgrades automatically;
 PowerShell upgrades require `-UpgradePowerShell` / `--upgrade-powershell`, and stable Rust
 updates require `-UpgradeRust` / `--upgrade-rust`.
 `-CheckUpgradesOnly` runs just that check without installing or changing anything. `-Uninstall` removes
-Node.js, Prettier, Python, PHP, PowerShell, ShellCheck, ripgrep, and Packer via the same package manager that installed them (winget or npm
+Node.js, Prettier, Python, PHP, PowerShell, ShellCheck, ripgrep, Packer, and Terraform via the same package manager that installed them (winget or npm
 on Windows, Homebrew or npm on macOS/Linux). BusyBox is removed only on Windows, where the kit
 manages it through WinGet; Unix installations are left untouched. Git is intentionally excluded since removing it would also need to
 unwind the credential/identity config this kit writes.
@@ -405,6 +416,7 @@ These are the supported knobs for routine use. They are safe to edit in a fork o
 | `user.install.ripgrep`                      | `true`                                                                                                                                                                               | Run the ripgrep (`rg`) CLI step. macOS/Linux use Homebrew; Windows uses WinGet.                                                                                                   |
 | `user.install.busybox`                      | `true`                                                                                                                                                                               | Install BusyBox through WinGet on Windows; detect an existing command on macOS/Linux.                                                                                             |
 | `user.install.packer`                       | `true`                                                                                                                                                                               | Run the HashiCorp Packer CLI step. macOS/Linux use the `hashicorp/tap` Homebrew tap; Windows uses WinGet.                                                                         |
+| `user.install.terraform`                    | `true`                                                                                                                                                                               | Run the HashiCorp Terraform CLI step. Existing versions are preserved.                                                                                                          |
 | `user.install.gpg`                          | `true`                                                                                                                                                                               | Run the GPG step. macOS/Linux use Homebrew; Windows configures PortableGit's bundled GPG.                                                                                         |
 | `user.install.vscodeSettings`               | `true`                                                                                                                                                                               | Apply any VS Code settings at all.                                                                                                                                                |
 | `user.install.devcontainerDefaults`         | `true`                                                                                                                                                                               | Include the Dev Containers keys and snippet.                                                                                                                                      |
@@ -482,6 +494,9 @@ are not meant for day-to-day editing.
 | `advanced.packer.homebrewFormula`                                 | `hashicorp/tap/packer`                     | Tap-qualified formula used on macOS/Linux.                                                                                  |
 | `advanced.packer.wingetPackageId`                                 | `Hashicorp.Packer`                         | Package used on Windows.                                                                                                    |
 | `advanced.packer.windowsSearchPaths`                              | WinGet `Links` and package folders         | Where an existing `packer.exe` is discovered.                                                                               |
+| `advanced.terraform.homebrewFormula`                              | `hashicorp/tap/terraform`                  | Tap-qualified formula used on macOS/Linux.                                                                                  |
+| `advanced.terraform.wingetPackageId`                              | `Hashicorp.Terraform`                      | Package used on Windows.                                                                                                    |
+| `advanced.terraform.windowsSearchPaths`                           | WinGet `Links` and package folders         | Where an existing `terraform.exe` is discovered.                                                                            |
 | `advanced.vscode.profileDirectories`                              | per-OS stable/insiders paths               | Uses `%VAR%` on Windows and `$HOME` elsewhere.                                                                              |
 | `advanced.vscode.managedSettingKeys.gitPath`                      | `git.path`                                 | Setting written with the resolved Git path.                                                                                 |
 | `advanced.vscode.managedSettingKeys.pythonInterpreter`            | `python.defaultInterpreterPath`            | Setting written with the resolved interpreter.                                                                              |
@@ -1185,14 +1200,14 @@ reviewed build. Terminal settings cannot force SDK shell output into the main pa
 select the Local harness when integrated-terminal interaction is more important than the
 Copilot harness. Instructions require the agent to disclose this limitation.
 
-Autopilot/Allow All and Fusion are explicit opt-ins for a personal copy of the config:
+Fusion Standard is the default preference. Autopilot/Allow All remains an explicit opt-in:
 
 ```json
 {
     "user": {
         "vscode": {
             "copilot": {
-                "autopilot": true,
+                "autopilot": false,
                 "fusion": true
             }
         }
@@ -1201,10 +1216,25 @@ Autopilot/Allow All and Fusion are explicit opt-ins for a personal copy of the c
 ```
 
 Merge those keys into the existing config; do not replace the file with this fragment.
-Both default to `false` so the kit does not grant unattended permissions or enable
-experimental model routing for every user. Fusion presents Auto as Fusion; `balance` is
-its Standard tier. Changing Fusion settings may restart the **Copilot runtime**, not the
-VS Code application. Settings under `user.vscode.settings` still win over these presets.
+The Fusion preset writes `chat.defaultModel: "auto"` and
+`github.copilot.chat.autoModeTierOverride: "balance"` (Standard when Auto is Fusion).
+It also writes the compatibility flags `chat.copilot.ensemble.enabled: true` and
+`chat.copilot.hydraFusion.enabled: "v2"` for builds that recognize them. Newer builds
+may no longer expose those flags; account/service availability determines whether Auto
+offers Fusion. Writing them does not prove that Fusion is active or unlock unavailable models.
+Set `user.vscode.copilot.fusion` to `false` to stop applying the preset; existing profile
+settings are not removed automatically. Settings under `user.vscode.settings` still win
+over these presets, including the shipped Auto/Standard values.
+
+An organization-managed model default takes precedence over the saved personal preference.
+The kit does not bypass enforced policy, change organization settings, or guarantee a personal
+default will win. Where policy permits it, choose Fusion/Standard in an individual conversation.
+Confirm the effective model and tier in a new chat's model picker. Changing Fusion settings
+may restart the **Copilot runtime**, not the VS Code application.
+The settings are eligible for the existing post-validation Settings Sync handoff;
+verify the remote values with **Settings Sync: Show Synced Data**, not just a local file.
+On macOS, CLI discovery supports both `bin/code-insiders` and `bin/code` inside the
+Insiders application bundle, without substituting the Stable CLI for Insiders.
 Autopilot/Allow All grants broad tool access; it is not permission to restart the editor
 or terminate a user's terminals. New-conversation defaults do not rewrite a running chat.
 

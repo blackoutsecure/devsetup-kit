@@ -53,7 +53,7 @@ $script:portableInstaller = ${function:Install-DevSetupPortableRuntime}
 function Get-DevSetupConfig {
     $install = [ordered]@{}
     foreach ($tool in @('git', 'githubCli', 'node', 'prettier', 'python', 'rust', 'dioxus', 'php',
-        'powershell', 'shellcheck', 'ripgrep', 'busybox', 'packer', 'gpg', 'vscodeSettings')) {
+        'powershell', 'shellcheck', 'ripgrep', 'busybox', 'packer', 'terraform', 'gpg', 'vscodeSettings')) {
         $install[$tool] = $false
     }
     $install.powershell = -not (Test-Path (Join-Path $env:FIXTURE 'disabled'))
