@@ -97,6 +97,7 @@ function Write-DevSetupConfiguration {
     Write-Host "                     Rust=$rustEnabled (stable; components=$($rustComponents -join ','); targets=$($rustTargets -join ','))"
     Write-Host "                     Dioxus CLI (dx)=$((Get-DevSetupValue $Config 'user.install.dioxus' $true))"
     Write-Host "                     PowerShell=$((Get-DevSetupValue $Config 'user.install.powershell' $true)), ShellCheck=$((Get-DevSetupValue $Config 'user.install.shellcheck' $true)), ripgrep=$((Get-DevSetupValue $Config 'user.install.ripgrep' $true)), BusyBox=$((Get-DevSetupValue $Config 'user.install.busybox' $true)), Packer=$((Get-DevSetupValue $Config 'user.install.packer' $true)), GPG=$((Get-DevSetupValue $Config 'user.install.gpg' $true))"
+    Write-Host "                     Terraform=$((Get-DevSetupValue $Config 'user.install.terraform' $true))"
     Write-Host "    VS Code:         settings=$((Get-DevSetupValue $Config 'user.install.vscodeSettings' $true)), profiles=$($profiles -join ', '), extensions=$($extensions.Count) managed"
     Write-Host "    User Sync:       enabled=$((Get-DevSetupValue $Config 'user.vscode.settingsSync.syncAfterSetup' $true)), provider=$((Get-DevSetupValue $Config 'user.vscode.settingsSync.requiredProvider' 'github')), skip=$SkipSettingsSync"
     Write-Host "    MCP servers:     $mcpCount configured"
@@ -191,6 +192,11 @@ if ($Uninstall) {
     if (Get-DevSetupValue $config "user.install.packer" $true) {
         & (Join-Path $scripts "install-packer.ps1") -Uninstall -Audit:$Audit
     }
+    if (Get-DevSetupValue $config "user.install.terraform" $true) {
+        & (Join-Path $scripts "install-terraform.ps1") -Uninstall -Audit:$Audit
+    } else {
+        Write-DevSetupStatus skip "Terraform" "user.install.terraform is false"
+    }
     if (Get-DevSetupValue $config "user.install.gpg" $true) {
         & (Join-Path $scripts "install-gpg.ps1") -Uninstall -Audit:$Audit
     }
@@ -249,6 +255,11 @@ if ($CheckUpgradesOnly) {
     }
     if (Get-DevSetupValue $config "user.install.packer" $true) {
         & (Join-Path $scripts "install-packer.ps1") -Audit -CheckUpgrades
+    }
+    if (Get-DevSetupValue $config "user.install.terraform" $true) {
+        & (Join-Path $scripts "install-terraform.ps1") -Audit -CheckUpgrades
+    } else {
+        Write-DevSetupStatus skip "Terraform" "user.install.terraform is false"
     }
     if (Get-DevSetupValue $config "user.install.gpg" $true) {
         & (Join-Path $scripts "install-gpg.ps1") -Audit -CheckUpgrades
@@ -349,6 +360,12 @@ if (Get-DevSetupValue $config "user.install.packer" $true) {
     & (Join-Path $scripts "install-packer.ps1") -Audit:$Audit -CheckUpgrades:$checkUpgrades
 } else {
     Write-DevSetupStatus skip "Packer" "user.install.packer is false"
+}
+
+if (Get-DevSetupValue $config "user.install.terraform" $true) {
+    & (Join-Path $scripts "install-terraform.ps1") -Audit:$Audit -CheckUpgrades:$checkUpgrades
+} else {
+    Write-DevSetupStatus skip "Terraform" "user.install.terraform is false"
 }
 
 if (Get-DevSetupValue $config "user.install.gpg" $true) {

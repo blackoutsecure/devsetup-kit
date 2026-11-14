@@ -20,6 +20,7 @@
             "ripgrep": true,
             "busybox": true,
             "packer": true,
+            "terraform": true,
             "gpg": true,
             "vscodeSettings": true,
             "devcontainerDefaults": true,
@@ -352,6 +353,14 @@
             "windowsSearchPaths": [
                 "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\packer.exe",
                 "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\packer.exe"
+            ]
+        },
+        "terraform": {
+            "homebrewFormula": "hashicorp/tap/terraform",
+            "wingetPackageId": "Hashicorp.Terraform",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\terraform.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\terraform.exe"
             ]
         },
         "gpg": {

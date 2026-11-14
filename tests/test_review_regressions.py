@@ -44,6 +44,37 @@ class ReviewRegressionTests(unittest.TestCase):
             capture_output=True, timeout=60, check=False,
         )
 
+    def test_terraform_audit_install_idempotency_and_uninstall_audit(self):
+        (self.root / "brew").mkdir()
+        self.executable("brew", r"""
+case "$*" in
+    shellenv) exit 0 ;;
+    --prefix) printf '%s/brew\n' "$HOME" ;;
+    "install --formula hashicorp/tap/terraform")
+        echo install >> "$HOME/brew-calls"
+        printf '#!/bin/sh\necho "Terraform v1.16.5"\n' > "$HOME/bin/terraform"
+        chmod +x "$HOME/bin/terraform" ;;
+    *) echo "Unexpected brew call: $*" >&2; exit 1 ;;
+esac
+""")
+        script = ROOT / "src/scripts/install-terraform.sh"
+        audit = self.run_script(script, "--audit")
+        self.assertEqual(audit.returncode, 0, audit.stdout + audit.stderr)
+        self.assertIn("would install 'hashicorp/tap/terraform'", audit.stdout)
+        self.assertFalse((self.root / "brew-calls").exists())
+        first = self.run_script(script)
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("Terraform v1.16.5", first.stdout)
+        second = self.run_script(script)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertNotIn("[install]", second.stdout + second.stderr)
+        self.assertEqual((self.root / "brew-calls").read_text().splitlines(), ["install"])
+        uninstall = self.run_script(script, "--uninstall", "--audit")
+        self.assertEqual(uninstall.returncode, 0, uninstall.stdout + uninstall.stderr)
+        self.assertIn("would uninstall 'hashicorp/tap/terraform'", uninstall.stdout)
+        self.assertTrue((self.bin / "terraform").exists())
+        self.assertEqual((self.root / "brew-calls").read_text().splitlines(), ["install"])
+
     def test_gpg_temporary_files_removed_on_failure_and_combined_export_import(self):
         self.executable("git", r"""
 if [[ "$*" == "config --global --get user.signingkey" ]]; then echo OLDKEY; exit 0; fi
