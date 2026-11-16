@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,75 +73,6 @@ esac
         self.assertIn("would uninstall 'hashicorp/tap/terraform'", uninstall.stdout)
         self.assertTrue((self.bin / "terraform").exists())
         self.assertEqual((self.root / "brew-calls").read_text().splitlines(), ["install"])
-
-    def test_gpg_temporary_files_removed_on_failure_and_combined_export_import(self):
-        self.executable("git", r"""
-if [[ "$*" == "config --global --get user.signingkey" ]]; then echo OLDKEY; exit 0; fi
-printf '%s\n' "$*" >> "$HOME/git-calls"
-""")
-        self.executable("gpg", r"""
-case " $* " in
-    *" --gen-key "*)
-        [[ ! -f "$HOME/fail-generate" ]] || exit 7
-        echo '[GNUPG:] KEY_CREATED B AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-        ;;
-    *" --export-secret-keys "*) echo secret ;;
-    *" --export "*) echo public ;;
-    *" --symmetric "*)
-        while [[ $# -gt 0 ]]; do
-            if [[ "$1" == -o ]]; then shift; printf encrypted > "$1"; exit; fi
-            shift
-        done
-        exit 1 ;;
-    *" --decrypt "*)
-        while [[ $# -gt 0 ]]; do
-            if [[ "$1" == -o ]]; then shift; cp "$HOME/import.tar.gz" "$1"; exit; fi
-            shift
-        done
-        exit 1 ;;
-    *" --import "*) [[ ! -f "$HOME/fail-import" ]] ;;
-    *) exit 1 ;;
-esac
-""")
-        script = ROOT / "manage-gpg-key.sh"
-        (self.root / "fail-generate").touch()
-        failed = self.run_script(
-            script, "--generate", "--key-name", "Fixture", "--key-email",
-            "fixture@example.test", "--key-passphrase", "fixture-secret",
-        )
-        self.assertNotEqual(failed.returncode, 0)
-        self.assertEqual(list(self.tmp.iterdir()), [])
-        (self.root / "fail-generate").unlink()
-        generated = self.run_script(
-            script, "--generate", "--key-name", "Fixture", "--key-email",
-            "fixture@example.test", "--key-passphrase", "fixture-secret",
-        )
-        self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
-        self.assertIn("user.signingkey " + "A" * 40, (self.root / "git-calls").read_text())
-        self.assertEqual(list(self.tmp.iterdir()), [])
-
-        bundle = self.root / "bundle"
-        bundle.mkdir()
-        (bundle / "secret.asc").write_text("fixture")
-        (bundle / "README.txt").write_text("Key ID: IMPORTED\n")
-        with tarfile.open(self.root / "import.tar.gz", "w:gz") as archive:
-            archive.add(bundle / "secret.asc", arcname="secret.asc")
-            archive.add(bundle / "README.txt", arcname="README.txt")
-        (self.root / "input.gpg").touch()
-        combined = self.run_script(
-            script, "--export", str(self.root / "output"),
-            "--import", str(self.root / "input.gpg"), "--zip-password", "fixture",
-        )
-        self.assertEqual(combined.returncode, 0, combined.stdout + combined.stderr)
-        self.assertEqual(list(self.tmp.iterdir()), [])
-        self.assertIn("user.signingkey IMPORTED", (self.root / "git-calls").read_text())
-        (self.root / "fail-import").touch()
-        failed_import = self.run_script(
-            script, "--export", str(self.root / "output"),
-            "--import", str(self.root / "input.gpg"), "--zip-password", "fixture",
-        )
-        self.assertNotEqual(failed_import.returncode, 0)
-        self.assertEqual(list(self.tmp.iterdir()), [])
 
     def test_prettier_audit_install_and_repeat_preserve_npm_configuration(self):
         self.executable("node", "echo v22.0.0\n")
@@ -313,44 +243,6 @@ class PowerShellReviewRegressionTests(unittest.TestCase):
             [PWSH, "-NoProfile", "-NonInteractive", "-Command", code],
             env=self.env, text=True, capture_output=True, timeout=120, check=False,
         )
-
-    def test_gpg_batch_cleanup_and_created_fingerprint(self):
-        self.executable(self.bin / "git", r"""
-case "$*" in
-    *"--get gpg.program"*) exit 1 ;;
-    *) printf '%s\n' "$*" >> "$HOME/git-calls" ;;
-esac
-""")
-        self.executable(self.bin / "gpg.exe", r"""
-case " $* " in
-    *" --gen-key "*)
-        for arg do batch="$arg"; done
-        printf '%s' "$batch" > "$HOME/batch-path"
-        [ ! -f "$HOME/fail-generate" ] || exit 7
-        echo '[GNUPG:] KEY_CREATED B AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' ;;
-    *) exit 1 ;;
-esac
-""")
-        script = str(ROOT / "manage-gpg-key.ps1").replace("'", "''")
-        command = (
-            "$p = ConvertTo-SecureString 'fixture-secret' -AsPlainText -Force; "
-            f"& '{script}' -Generate -KeyName Fixture "
-            "-KeyEmail fixture@example.test -KeyPassphrase $p"
-        )
-        (self.root / "fail-generate").touch()
-        failed = self.run_powershell(command)
-        self.assertNotEqual(failed.returncode, 0)
-        self.assertFalse(Path((self.root / "batch-path").read_text()).exists())
-        (self.root / "fail-generate").unlink()
-        generated = self.run_powershell(command)
-        self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
-        self.assertIn("user.signingkey " + "A" * 40, (self.root / "git-calls").read_text())
-        self.assertFalse(Path((self.root / "batch-path").read_text()).exists())
-        automatic = self.run_powershell(
-            f"& '{script}' -Generate -KeyName Fixture -KeyEmail fixture@example.test"
-        )
-        self.assertEqual(automatic.returncode, 0, automatic.stderr)
-        self.assertFalse(Path((self.root / "batch-path").read_text()).exists())
 
     def test_portable_git_compares_full_windows_version(self):
         portable = self.root / "portable" / "cmd"

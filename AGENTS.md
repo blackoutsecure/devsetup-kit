@@ -27,8 +27,8 @@ python3 -m unittest discover -s tests -v
 
 ./manage-gpg-key.sh --audit
 ./manage-gpg-key.sh --generate
-./manage-gpg-key.sh --export /path/to/gpg-backup --zip-password '<password>'
-./manage-gpg-key.sh --import /path/to/gpg-backup.gpg --zip-password '<password>'
+./manage-gpg-key.sh --export /path/to/gpg-backup
+./manage-gpg-key.sh --import /path/to/gpg-backup.gpg
 
 # Lint (not wired into any script or workflow; run directly)
 bash -n setup.sh manage-gpg-key.sh src/config.sh src/scripts/*.sh
@@ -50,8 +50,8 @@ pwsh .\src\scripts\install-node.ps1 -Audit
 
 .\manage-gpg-key.ps1 -Audit
 .\manage-gpg-key.ps1 -Generate
-.\manage-gpg-key.ps1 -Export C:\path\to\gpg-backup -ZipPassword <SecureString>
-.\manage-gpg-key.ps1 -Import C:\path\to\gpg-backup.gpg -ZipPassword <SecureString>
+.\manage-gpg-key.ps1 -Export C:\path\to\gpg-backup
+.\manage-gpg-key.ps1 -Import C:\path\to\gpg-backup.gpg
 
 Invoke-ScriptAnalyzer -Path . -Recurse
 ```
@@ -119,21 +119,25 @@ A user customizes the kit by editing that one file in a fork or personal copy; c
 
 ### GPG key management
 
-`manage-gpg-key.sh` and `manage-gpg-key.ps1` are separate from setup because they change real state: a new secret key in the keyring and the global git signing config. Subcommands are `--audit`/`-Audit`, `--generate`/`-Generate`, `--export <path>`/`-Export <path>`, `--import <path>`/`-Import <path>`; generate and export can be combined. Both accept `--key-name`/`--key-email` (`-KeyName`/`-KeyEmail`) falling back to `user.git.userName` / `user.git.userEmail`, plus `--key-passphrase`/`-KeyPassphrase` for the private key and `--zip-password`/`-ZipPassword` for the archive. The PowerShell script takes both as `SecureString`, materializing plaintext only transiently for `gpg.exe --passphrase`.
+The Bash and PowerShell wrappers delegate to `src/manage-gpg-key.py` (Python 3.10+).
+Actions include listing, generation, verification, agent caching, encrypted export/import,
+explicit Git default selection and confirmed removal, GitHub public-key registration, and
+VS Code signing settings. Multiple selected-key actions cover all keys unless full fingerprints
+are supplied. `--audit` does not touch the keyring or write settings.
 
-- `--audit` touches no key material. It reports the resolved `gpg` binary and the current `user.signingkey`, and states what generate/export/import _would_ do.
-- `--generate` writes a temp batch file containing the passphrase in cleartext, runs `gpg --batch --pinentry-mode loopback --gen-key` (RSA 4096, expiry from `advanced.gpg.keyExpiry`), deletes the batch file, then sets `user.signingkey`, `commit.gpgsign`, `tag.gpgsign`, and `gpg.program` globally. A generated passphrase is printed once and cannot be recovered.
-- `--export` runs `gpg --export-secret-keys --armor` — the one operation that extracts **private key material**. With the public key, a `README.txt`, and (when a passphrase is known) a `KEY-PASSPHRASE.txt`, it is archived and encrypted with GPG symmetric AES-256 to `<path>.gpg`. The plaintext archive lives briefly in a temp directory removed by a `trap` / `finally`.
-- `--import` decrypts that archive, runs `gpg --import` on `secret.asc`, reads the key ID from the bundled `README.txt`, and reconfigures global git signing. A bundled `KEY-PASSPHRASE.txt` is printed to the terminal.
-
-Treat every export path as a secret-bearing artifact: it holds a usable private key and, by default, its passphrase.
+GnuPG pinentry handles all passphrases; never pass them in arguments or write them to files.
+Export streams secret key data directly into GPG symmetric encryption, refuses destinations
+inside Git repositories or existing files, and never saves a plaintext archive. Import does
+not set the default and may partially import on error. Legacy encrypted tar/zip backups are
+not directly supported and can contain plaintext passphrases inside the encryption. Public
+keys only are sent to GitHub. Settings Sync does not transfer keys, passphrases, or Git config.
 
 ## Safety invariants
 
 - Every operation must be idempotent and safe to re-run: compare current state before writing, emit `[found]` when nothing changed, and make a second run report no changes.
 - Every install step must have an audit path that detects and reports without writing. A step that cannot be audited does not belong in the kit.
 - Back up or prompt before overwriting existing user configuration. The VS Code applier is additive and preserves unrelated keys, but it rewrites `settings.json` as plain JSON and drops comments; any change that replaces rather than merges user content needs a backup or an explicit prompt first.
-- Never export, print, or log private key material or passphrases outside the one path the user explicitly asked for. Generated secrets are shown once, deliberately, and never written to a log, a status line, or `DEVSETUP_STATUS_LOG`.
+- Never print, log, or write private key material or passphrases in plaintext; only an explicitly requested encrypted export may persist private keys.
 - Never delete user data. Git is excluded from `--uninstall` because removing it would also require unwinding the credential and identity config this kit wrote; Homebrew is excluded because other tools depend on it.
 - Prefer additive changes: append to `PATH`, merge settings, add MCP servers — never reconcile destructively.
 - Keep destructive operations behind explicit confirmation. `--uninstall`, `-Configure` on `setup-wsl.ps1`, and every `manage-gpg-key` write are opt-in flags a default run never reaches.

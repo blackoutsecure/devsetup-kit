@@ -230,11 +230,9 @@ the user-local Homebrew flow.
 
 ### Optional GPG signing identity
 
-`manage-gpg-key.ps1` / `manage-gpg-key.sh` are separate, opt-in helpers that generate, export, or
-import a GPG key for `git` commit/tag signing. They're separate from `setup.ps1`/`setup.sh` because
-they change real state: a new secret key in your keyring, and your global git signing config
-(`user.signingkey`, `commit.gpgsign`, `tag.gpgsign`, and `gpg.program`). Nothing here runs as part of the main setup.
-Audit first:
+`manage-gpg-key.ps1` / `manage-gpg-key.sh` are opt-in helpers for local GnuPG signing keys.
+They require Python 3.10+, Git, GnuPG, and an interactive native pinentry for operations that
+use private keys. They do not run as part of setup. Audit before changing anything:
 
 ```powershell
 .\manage-gpg-key.ps1 -Audit
@@ -244,35 +242,69 @@ Audit first:
 ./manage-gpg-key.sh --audit
 ```
 
-Generate a new key (using `user.git.userName` / `user.git.userEmail` from config) and configure git
-to sign with it:
+List all local secret keys, generate a passphrase-protected key, verify signing, and explicitly
+choose the Git default (replace the fingerprint with the full primary fingerprint shown by list):
 
 ```powershell
-.\manage-gpg-key.ps1 -Generate
+.\manage-gpg-key.ps1 -List
+.\manage-gpg-key.ps1 -Generate -KeyName "Example Name" -KeyEmail "you@example.com"
+.\manage-gpg-key.ps1 -Verify
+.\manage-gpg-key.ps1 -Default <FULL_FINGERPRINT> -KeyEmail "you@example.com"
 ```
 
 ```bash
-./manage-gpg-key.sh --generate
+./manage-gpg-key.sh --list
+./manage-gpg-key.sh --generate --key-name "Example Name" --key-email "you@example.com"
+./manage-gpg-key.sh --verify
+./manage-gpg-key.sh --default FULL_FINGERPRINT --key-email "you@example.com"
 ```
 
-Back up the configured signing key to a password-protected archive, and restore it on another
-machine. The archive is a plain zip/tarball encrypted with GPG's own AES-256 symmetric cipher, so
-"zipping it and putting it wherever" doesn't need a separate archiver:
+Name and email default to `user.git.userName` and `user.git.userEmail` in the configuration.
+Generation does not change the default; `--default` / `-Default` configures global Git signing
+for commits and tags. A repository's local Git configuration can override global settings.
+List, verify, cache, export, and GitHub actions select **all** local keys by default. Pass
+`--key FULL_FINGERPRINT` repeatedly, or `-Key FULL_FINGERPRINT[,FULL_FINGERPRINT]`, to narrow
+the selection. `--cache` / `-Cache` clears agent cache entries before signing with each selected
+key. On macOS, a configured `pinentry-mac` may offer “Save in Keychain”; on Windows and Linux
+credential-vault integration depends on the installed pinentry. Agent or OS caching may avoid
+re-prompting. Passphrases are never accepted as command arguments, printed, or stored in this kit.
+
+Back up selected keys to an encrypted file **outside any Git repository**, then restore them:
 
 ```powershell
-.\manage-gpg-key.ps1 -Export C:\path\to\gpg-backup   # -ZipPassword <SecureString>, or one is generated and shown once
-.\manage-gpg-key.ps1 -Import C:\path\to\gpg-backup.gpg -ZipPassword <SecureString>
+.\manage-gpg-key.ps1 -Export C:\path\to\gpg-backup
+.\manage-gpg-key.ps1 -Import C:\path\to\gpg-backup.gpg
 ```
 
 ```bash
-./manage-gpg-key.sh --export /path/to/gpg-backup --zip-password '<password>'   # omit to generate one, shown once
-./manage-gpg-key.sh --import /path/to/gpg-backup.gpg --zip-password '<password>'
+./manage-gpg-key.sh --export /path/to/gpg-backup
+./manage-gpg-key.sh --import /path/to/gpg-backup.gpg
 ```
 
-`-Generate`/`--generate` and `-Export`/`--export` can be combined in one run. If a passphrase or
-archive password isn't supplied, one is generated and printed once - save it, since it can't be
-recovered afterward. `-KeyPassphrase`/`--key-passphrase` protects the private key itself (used by
-gpg-agent when signing); `-ZipPassword`/`--zip-password` protects only the backup archive.
+GnuPG streams the secret-key export directly into AES-256 encryption; pinentry asks for the
+backup password and any needed key passphrases. Keep the backup and both kinds of passphrase
+securely, separately, and test restoration in a disposable keyring. Hardware-backed keys and
+other non-exportable secret material may not be recoverable from a backup. Import does not
+change the Git default and may leave partially imported keys if it fails.
+
+Older backups made by this kit contain an encrypted tar/zip archive and can contain a plaintext
+key passphrase inside that archive. The new importer accepts only the new encrypted key stream;
+recover old archives separately in a secure environment, then create a new backup. Treat the
+old archive as especially sensitive. Legacy passphrase options and combined actions are no
+longer supported.
+
+Use `--github-check` / `-GithubCheck` to check public-key registration and `--github-publish` /
+`-GithubPublish` to upload public keys through authenticated `gh` (appropriate authorization
+may be required). GitHub must also have the commit's email verified and associated with the
+key for a Verified signature. GitHub has no account-wide default GPG key; select it locally
+with Git. `--remove FULL_FINGERPRINT` / `-Remove FULL_FINGERPRINT` requires typed confirmation,
+refuses the current Git default, and does not remove a GitHub registration.
+
+`--vscode-signing` / `-VSCodeSigning` enables the VS Code commit-signing preference in
+configured profiles and requests Settings Sync only where the existing sync policy permits it.
+Existing settings are backed up before rewriting (JSON comments may be lost in the rewritten
+file). Settings Sync does **not** transfer private keys, passphrases, or Git's signing default;
+set those up separately on every machine.
 
 ### Repository checks
 
