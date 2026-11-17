@@ -30,7 +30,54 @@ done
 devsetup_assert_execution_mode "$audit"
 
 python_version="$(devsetup_config user.python.version 3.14)"
+python_packages="$(devsetup_config_list user.python.packages PyYAML)"
 uv_install_url="$(devsetup_config advanced.python.uvInstallUrl.unix https://astral.sh/uv/install.sh)"
+
+devsetup_python_package_status() {
+	if [[ $print_path -eq 1 ]]; then
+		devsetup_status "$@" >&2
+	else
+		devsetup_status "$@"
+	fi
+}
+
+devsetup_ensure_python_packages() {
+	local interpreter="$1" read_only="$2" package in_venv install_scope
+	[[ -n "$python_packages" ]] || return 0
+
+	if ! "$interpreter" -m pip --version >/dev/null 2>&1; then
+		printf 'pip is unavailable for %s; cannot install configured Python packages.\n' "$interpreter" >&2
+		return 1
+	fi
+
+	in_venv="$("$interpreter" -c 'import sys; print(sys.prefix != sys.base_prefix)')"
+	install_scope="--user"
+	[[ "$in_venv" == "True" ]] && install_scope=""
+
+	printf '%s\n' "$python_packages" | while IFS= read -r package; do
+		[[ -n "$package" ]] || continue
+		if "$interpreter" -m pip show "$package" >/dev/null 2>&1; then
+			devsetup_python_package_status found "Python package $package" "already installed"
+		elif [[ "$read_only" -eq 1 ]]; then
+			devsetup_python_package_status install "Python package $package" "would install via pip $install_scope"
+		else
+			devsetup_python_package_status install "Python package $package" "installing via pip $install_scope"
+			if [[ -n "$install_scope" ]]; then
+				if [[ $print_path -eq 1 ]]; then
+					"$interpreter" -m pip install "$install_scope" "$package" >&2
+				else
+					"$interpreter" -m pip install "$install_scope" "$package"
+				fi
+			else
+				if [[ $print_path -eq 1 ]]; then
+					"$interpreter" -m pip install "$package" >&2
+				else
+					"$interpreter" -m pip install "$package"
+				fi
+			fi
+		fi
+	done
+}
 
 if [[ $uninstall -eq 1 ]]; then
 	# Only uninstall if uv actually reports this version installed - uv merely
@@ -70,10 +117,17 @@ done
 if [[ $audit -eq 1 ]]; then
 	if [[ -n "$python_command" ]]; then
 		devsetup_status found Python "$("$python_command" --version 2>&1) at $python_command"
+		devsetup_ensure_python_packages "$python_command" 1
 	elif command -v uv >/dev/null 2>&1; then
 		devsetup_status install Python "would install CPython $python_version via uv"
+		if [[ -n "$python_packages" ]]; then
+			devsetup_status install "Python packages" "would install configured packages after Python is available"
+		fi
 	else
 		devsetup_status install Python "would bootstrap uv, then install CPython $python_version"
+		if [[ -n "$python_packages" ]]; then
+			devsetup_status install "Python packages" "would install configured packages after Python is available"
+		fi
 	fi
 	exit 0
 fi
@@ -95,6 +149,8 @@ if [[ -z "$python_command" ]]; then
 	uv python install "$python_version" >&2
 	python_command="$(uv python find "$python_version")"
 fi
+
+devsetup_ensure_python_packages "$python_command" 0
 
 if [[ $print_path -eq 1 ]]; then
 	devsetup_status found Python "$("$python_command" --version 2>&1) at $python_command" >&2
