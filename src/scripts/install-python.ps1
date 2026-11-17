@@ -19,6 +19,41 @@ $ErrorActionPreference = "Stop"
 Assert-DevSetupExecutionMode -ReadOnly:$Audit
 $config = Get-DevSetupConfig
 
+function Install-DevSetupPythonPackages {
+    param(
+        [Parameter(Mandatory)][string]$PythonExe,
+        [Parameter(Mandatory)][string[]]$Packages,
+        [switch]$Audit
+    )
+
+    if ($Packages.Count -eq 0) { return }
+    & $PythonExe -m pip --version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip is unavailable for $PythonExe; cannot install configured Python packages."
+    }
+
+    $isVirtualEnvironment = (& $PythonExe -c "import sys; print(sys.prefix != sys.base_prefix)").Trim() -eq "True"
+    foreach ($package in $Packages) {
+        & $PythonExe -m pip show $package *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-DevSetupStatus found "Python package $package" "already installed"
+        } elseif ($Audit) {
+            $scope = if ($isVirtualEnvironment) { "" } else { " --user" }
+            Write-DevSetupStatus install "Python package $package" "would install via pip$scope"
+        } else {
+            $arguments = @("-m", "pip", "install")
+            if (-not $isVirtualEnvironment) { $arguments += "--user" }
+            $arguments += $package
+            $scope = if ($isVirtualEnvironment) { "" } else { " --user" }
+            Write-DevSetupStatus install "Python package $package" "installing via pip$scope"
+            & $PythonExe @arguments
+            if ($LASTEXITCODE -ne 0) {
+                throw "pip failed to install configured Python package $package."
+            }
+        }
+    }
+}
+
 if (-not $PythonVersion) {
     $PythonVersion = Get-DevSetupValue $config "user.python.version" "3.14"
 }
@@ -75,13 +110,21 @@ if (-not $pythonExe) {
 }
 
 if ($Audit) {
+    $packages = @(Get-DevSetupStringList $config "user.python.packages" @("PyYAML"))
     if ($pythonExe) {
         Write-DevSetupStatus found "Python" "$(& $pythonExe --version) at $pythonExe"
+        Install-DevSetupPythonPackages -PythonExe $pythonExe -Packages $packages -Audit
         if ($CheckUpgrades) { Test-DevSetupWingetUpgrade -Component "Python" -PackageId $wingetPackageId }
     } elseif (Get-Command winget.exe -ErrorAction SilentlyContinue) {
         Write-DevSetupStatus install "Python" "would install $wingetPackageId via winget"
+        if ($packages.Count -gt 0) {
+            Write-DevSetupStatus install "Python packages" "would install configured packages after Python is available"
+        }
     } else {
         Write-DevSetupStatus install "Python" "would bootstrap uv, then install CPython $PythonVersion"
+        if ($packages.Count -gt 0) {
+            Write-DevSetupStatus install "Python packages" "would install configured packages after Python is available"
+        }
     }
     return
 }
@@ -144,5 +187,7 @@ if ($ConfigureVSCode) {
 }
 
 Write-DevSetupStatus found "Python" "$(& $pythonExe --version) at $pythonExe"
+$packages = @(Get-DevSetupStringList $config "user.python.packages" @("PyYAML"))
+Install-DevSetupPythonPackages -PythonExe $pythonExe -Packages $packages
 if ($CheckUpgrades) { Test-DevSetupWingetUpgrade -Component "Python" -PackageId $wingetPackageId }
 $pythonExe

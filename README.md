@@ -459,6 +459,7 @@ These are the supported knobs for routine use. They are safe to edit in a fork o
 | `user.git.userName`                         | `""`                                                                                                                                                                                 | Applied via `git config --global user.name` when non-empty.                                                                                                                       |
 | `user.git.userEmail`                        | `""`                                                                                                                                                                                 | Applied via `git config --global user.email` when non-empty.                                                                                                                      |
 | `user.python.version`                       | `"3.14"`                                                                                                                                                                             | Single source of truth for Windows winget and macOS/Linux `uv`.                                                                                                                   |
+| `user.python.packages`                      | `["PyYAML"]`                                                                                                                                                                         | Python packages to install when missing, into the user site (or active virtual environment). Set to `[]` to opt out.                                                           |
 | `user.python.allowGlobalPackageInstalls`    | `false`                                                                                                                                                                              | Written to VS Code as `python.globalModuleInstallation`; keep `false` to preserve the Python extension's virtual-environment warning.                                             |
 | `user.python.recommendedVirtualEnvironment` | `".venv"`                                                                                                                                                                            | Documented environment folder recommendation for project-level dependencies.                                                                                                      |
 | `user.vscode.profiles`                      | `["stable","insiders"]`                                                                                                                                                              | Which VS Code profiles receive settings and extensions.                                                                                                                           |
@@ -1100,6 +1101,11 @@ to `uv` in a user-local location.
 The version comes from `user.python.version` on every platform. The PowerShell script emits the
 resolved interpreter path as its final pipeline value; the shell script does the same under
 `--print-path`, with progress on stderr.
+
+Configured `user.python.packages` are installed only when missing. Outside a virtual environment,
+the installer uses pip's `--user` scope; inside one, it installs into that environment. Audit mode
+reports missing packages without installing them. Python package upgrades and package removal are
+not automatic; set the list to `[]` to disable this step.
 
 ### Node.js and npm
 
