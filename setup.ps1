@@ -97,6 +97,7 @@ function Write-DevSetupConfiguration {
     Write-Host "                     Rust=$rustEnabled (stable; components=$($rustComponents -join ','); targets=$($rustTargets -join ','))"
     Write-Host "                     Dioxus CLI (dx)=$((Get-DevSetupValue $Config 'user.install.dioxus' $true))"
     Write-Host "                     PowerShell=$((Get-DevSetupValue $Config 'user.install.powershell' $true)), ShellCheck=$((Get-DevSetupValue $Config 'user.install.shellcheck' $true)), ripgrep=$((Get-DevSetupValue $Config 'user.install.ripgrep' $true)), BusyBox=$((Get-DevSetupValue $Config 'user.install.busybox' $true)), Packer=$((Get-DevSetupValue $Config 'user.install.packer' $true)), GPG=$((Get-DevSetupValue $Config 'user.install.gpg' $true))"
+    Write-Host "                     Azure CLI=$((Get-DevSetupValue $Config 'user.install.azureCli' $true)), Microsoft Graph PowerShell=$((Get-DevSetupValue $Config 'user.install.microsoftGraphPowershell' $true))"
     Write-Host "                     Terraform=$((Get-DevSetupValue $Config 'user.install.terraform' $true))"
     Write-Host "    VS Code:         settings=$((Get-DevSetupValue $Config 'user.install.vscodeSettings' $true)), profiles=$($profiles -join ', '), extensions=$($extensions.Count) managed"
     Write-Host "    User Sync:       enabled=$((Get-DevSetupValue $Config 'user.vscode.settingsSync.syncAfterSetup' $true)), provider=$((Get-DevSetupValue $Config 'user.vscode.settingsSync.requiredProvider' 'github')), skip=$SkipSettingsSync"
@@ -180,6 +181,12 @@ if ($Uninstall) {
     if (Get-DevSetupValue $config "user.install.powershell" $true) {
         & (Join-Path $scripts "install-powershell.ps1") -Uninstall -Audit:$Audit
     }
+    if (Get-DevSetupValue $config "user.install.azureCli" $true) {
+        & (Join-Path $scripts "install-azure-cli.ps1") -Uninstall -Audit:$Audit
+    }
+    if (Get-DevSetupValue $config "user.install.microsoftGraphPowershell" $true) {
+        & (Join-Path $scripts "install-microsoft-graph-powershell.ps1") -Uninstall -Audit:$Audit
+    }
     if (Get-DevSetupValue $config "user.install.shellcheck" $true) {
         & (Join-Path $scripts "install-shellcheck.ps1") -Uninstall -Audit:$Audit
     }
@@ -243,6 +250,12 @@ if ($CheckUpgradesOnly) {
     }
     if (Get-DevSetupValue $config "user.install.powershell" $true) {
         & (Join-Path $scripts "install-powershell.ps1") -Audit -CheckUpgrades | Out-Null
+    }
+    if (Get-DevSetupValue $config "user.install.azureCli" $true) {
+        & (Join-Path $scripts "install-azure-cli.ps1") -Audit -CheckUpgrades | Out-Null
+    }
+    if (Get-DevSetupValue $config "user.install.microsoftGraphPowershell" $true) {
+        & (Join-Path $scripts "install-microsoft-graph-powershell.ps1") -Audit -CheckUpgrades | Out-Null
     }
     if (Get-DevSetupValue $config "user.install.shellcheck" $true) {
         & (Join-Path $scripts "install-shellcheck.ps1") -Audit -CheckUpgrades
@@ -336,6 +349,18 @@ if (Get-DevSetupValue $config "user.install.powershell" $true) {
     $powerShellExe = & (Join-Path $scripts "install-powershell.ps1") -Audit:$Audit -CheckUpgrades:$checkUpgrades -Upgrade:$UpgradePowerShell | Select-Object -Last 1
 } else {
     Write-DevSetupStatus skip "PowerShell" "user.install.powershell is false"
+}
+
+if (Get-DevSetupValue $config "user.install.azureCli" $true) {
+    & (Join-Path $scripts "install-azure-cli.ps1") -Audit:$Audit -CheckUpgrades:$checkUpgrades
+} else {
+    Write-DevSetupStatus skip "Azure CLI" "user.install.azureCli is false"
+}
+
+if (Get-DevSetupValue $config "user.install.microsoftGraphPowershell" $true) {
+    & (Join-Path $scripts "install-microsoft-graph-powershell.ps1") -Audit:$Audit -CheckUpgrades:$checkUpgrades
+} else {
+    Write-DevSetupStatus skip "Microsoft Graph PowerShell" "user.install.microsoftGraphPowershell is false"
 }
 
 if (Get-DevSetupValue $config "user.install.shellcheck" $true) {

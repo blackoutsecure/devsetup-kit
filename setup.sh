@@ -98,6 +98,8 @@ if [[ $uninstall -eq 1 ]]; then
 	if devsetup_enabled user.install.rust; then "${BASH:-bash}" "$scripts/install-rust.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.dioxus; then "${BASH:-bash}" "$scripts/install-dioxus.sh" --uninstall $audit_flag; else devsetup_status skip "Dioxus CLI" "user.install.dioxus is false"; fi
 	if devsetup_enabled user.install.powershell; then "${BASH:-bash}" "$scripts/install-powershell.sh" --uninstall $audit_flag; fi
+	if devsetup_enabled user.install.azureCli; then "${BASH:-bash}" "$scripts/install-azure-cli.sh" --uninstall $audit_flag; fi
+	if devsetup_enabled user.install.microsoftGraphPowershell; then "${BASH:-bash}" "$scripts/install-microsoft-graph-powershell.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.shellcheck; then "${BASH:-bash}" "$scripts/install-shellcheck.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.ripgrep; then "${BASH:-bash}" "$scripts/install-ripgrep.sh" --uninstall $audit_flag; fi
 	if devsetup_enabled user.install.busybox; then "${BASH:-bash}" "$scripts/install-busybox.sh" --uninstall $audit_flag; fi
@@ -126,6 +128,8 @@ if [[ $check_upgrades_only -eq 1 ]]; then
 	if devsetup_enabled user.install.rust; then "${BASH:-bash}" "$scripts/install-rust.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.dioxus; then "${BASH:-bash}" "$scripts/install-dioxus.sh" --audit --check-upgrades; else devsetup_status skip "Dioxus CLI" "user.install.dioxus is false"; fi
 	if devsetup_enabled user.install.powershell; then "${BASH:-bash}" "$scripts/install-powershell.sh" --audit --check-upgrades; fi
+	if devsetup_enabled user.install.azureCli; then "${BASH:-bash}" "$scripts/install-azure-cli.sh" --audit --check-upgrades; fi
+	if devsetup_enabled user.install.microsoftGraphPowershell; then "${BASH:-bash}" "$scripts/install-microsoft-graph-powershell.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.shellcheck; then "${BASH:-bash}" "$scripts/install-shellcheck.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.ripgrep; then "${BASH:-bash}" "$scripts/install-ripgrep.sh" --audit --check-upgrades; fi
 	if devsetup_enabled user.install.busybox; then "${BASH:-bash}" "$scripts/install-busybox.sh" --audit --check-upgrades; fi
@@ -239,6 +243,18 @@ if devsetup_enabled user.install.powershell; then
 	fi
 else
 	devsetup_status skip PowerShell "user.install.powershell is false"
+fi
+
+if devsetup_enabled user.install.azureCli; then
+	"${BASH:-bash}" "$scripts/install-azure-cli.sh" $audit_flag $upgrade_flag
+else
+	devsetup_status skip "Azure CLI" "user.install.azureCli is false"
+fi
+
+if devsetup_enabled user.install.microsoftGraphPowershell; then
+	"${BASH:-bash}" "$scripts/install-microsoft-graph-powershell.sh" $audit_flag $upgrade_flag
+else
+	devsetup_status skip "Microsoft Graph PowerShell" "user.install.microsoftGraphPowershell is false"
 fi
 
 if devsetup_enabled user.install.shellcheck; then

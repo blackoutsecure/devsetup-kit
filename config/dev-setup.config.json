@@ -16,6 +16,8 @@
             "dioxus": true,
             "php": true,
             "powershell": true,
+            "azureCli": true,
+            "microsoftGraphPowershell": true,
             "shellcheck": true,
             "ripgrep": true,
             "busybox": true,
@@ -327,6 +329,22 @@
             "wingetPackageId": "Microsoft.PowerShell",
             "portableReleaseApiUrl": "https://api.github.com/repos/PowerShell/PowerShell/releases/latest",
             "portableInstallDir": "%LOCALAPPDATA%\\Programs\\PowerShell"
+        },
+        "azureCli": {
+            "homebrewFormula": "azure-cli",
+            "wingetPackageId": "Microsoft.AzureCLI",
+            "windowsSearchPaths": [
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\az.exe",
+                "%ProgramFiles%\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.exe",
+                "%ProgramFiles(x86)%\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\wbin\\az.exe",
+                "%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\{wingetPackageId}_*\\*\\wbin\\az.exe"
+            ]
+        },
+        "microsoftGraphPowershell": {
+            "moduleName": "Microsoft.Graph.Authentication",
+            "repository": "PSGallery",
+            "minimumModuleVersion": "2.0.0"
         },
         "shellcheck": {
             "homebrewFormula": "shellcheck",

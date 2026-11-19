@@ -14,6 +14,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SetupEntrypointTests(unittest.TestCase):
+    def test_native_microsoft_tools_are_enabled_and_wired_in_all_modes(self):
+        config = json.loads((ROOT / "config" / "dev-setup.config.json").read_text())
+        self.assertTrue(config["user"]["install"]["azureCli"])
+        self.assertTrue(config["user"]["install"]["microsoftGraphPowershell"])
+        self.assertEqual(
+            config["advanced"]["azureCli"]["wingetPackageId"],
+            "Microsoft.AzureCLI",
+        )
+        self.assertEqual(
+            config["advanced"]["microsoftGraphPowershell"]["moduleName"],
+            "Microsoft.Graph.Authentication",
+        )
+        for name, installer in (
+            ("setup.ps1", "install-azure-cli.ps1"),
+            ("setup.ps1", "install-microsoft-graph-powershell.ps1"),
+            ("setup.sh", "install-azure-cli.sh"),
+            ("setup.sh", "install-microsoft-graph-powershell.sh"),
+        ):
+            text = (ROOT / name).read_text()
+            self.assertEqual(text.count(installer), 3)
+
     def test_terraform_is_enabled_and_wired_in_all_modes(self):
         config = json.loads((ROOT / "config" / "dev-setup.config.json").read_text())
         self.assertTrue(config["user"]["install"]["terraform"])
