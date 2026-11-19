@@ -464,19 +464,21 @@ def manage_extensions(config: dict, dry_run: bool) -> None:
             if dry_run:
                 if ext in missing:
                     detail = f"would install {install_id} ({profile})"
+                    status("install", "ext", detail)
                 else:
-                    detail = f"would ensure {channel} channel for {ext} ({profile})"
-                status("install", "ext", detail)
+                    detail = f"{ext} already installed ({profile})"
+                    status("found", "ext", detail)
                 continue
-            action = "installing" if ext in missing else f"ensuring {channel} channel for"
-            status("install", "ext", f"{action} {ext} ({profile}); deadline 600s")
+            if ext in installed:
+                status("found", "ext", f"{ext} already installed ({profile})")
+                continue
+            status("install", "ext", f"installing {ext} ({profile}); deadline 600s")
             code, output = run_cli(
                 cli, "--install-extension", install_id, "--force",
                 timeout=600, capture_output=False
             )
             if code == 0:
-                state = "install" if ext in missing else "found"
-                status(state, "ext", f"{channel} channel selected for {ext} ({profile})")
+                status("install", "ext", f"{channel} channel preference applied for {ext} ({profile})")
             else:
                 status("warn", "ext", f"failed to install {ext}: {output.strip()[:120]}")
 
