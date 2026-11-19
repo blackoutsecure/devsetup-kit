@@ -542,14 +542,14 @@ class ExtensionManagementTests(unittest.TestCase):
             details = [call.args[2] for call in report.call_args_list]
             for extension in self.additions:
                 self.assertIn(f"would install {extension} (test)", details)
-            stable_checks = [
-                detail for detail in details if detail.startswith("would ensure stable channel")
+            already_installed = [
+                detail for detail in details if detail.endswith("(test)")
             ]
-            self.assertEqual(len(stable_checks), len(self.wanted - self.additions))
+            self.assertTrue(already_installed)
             self.assertIn(f"would uninstall blocked {self.blocked} (test)", details)
         self.assertEqual(self.installed, before)
 
-    def test_apply_selects_stable_and_prerelease_channels_per_profile(self):
+    def test_apply_selects_stable_and_prerelease_preferences_per_profile(self):
         config = {
             "user": {
                 "vscode": {
@@ -576,9 +576,7 @@ class ExtensionManagementTests(unittest.TestCase):
         self.assertEqual(
             [call.args[:3] for call in run.call_args_list],
             [
-                ("stable-code", "--install-extension", "example.extension"),
                 ("stable-code", "--install-extension", "missing.extension"),
-                ("insiders-code", "--install-extension", "example.extension@prerelease"),
                 ("insiders-code", "--install-extension", "missing.extension@prerelease"),
             ],
         )
@@ -632,7 +630,7 @@ class ExtensionManagementTests(unittest.TestCase):
             self.assertEqual(snapshot(), before)
 
             self.assertEqual(configure_vscode.main(), 0)
-            self.assertEqual(run.call_count, len(self.wanted) + 1)
+            self.assertEqual(run.call_count, len(self.additions) + 1)
             self.assertEqual(self.installed, self.wanted | {self.optional})
             saved = configure_vscode.load_json(settings_path)
             self.assertEqual(saved["editor.fontSize"], custom_settings["editor.fontSize"])
@@ -642,11 +640,11 @@ class ExtensionManagementTests(unittest.TestCase):
             run.reset_mock()
             report.reset_mock()
             self.assertEqual(configure_vscode.main(), 0)
-            self.assertEqual(run.call_count, len(self.wanted))
+            self.assertEqual(run.call_count, 0)
             self.assertEqual(snapshot(), before)
             self.assertEqual(
                 {call.args[0] for call in report.call_args_list},
-                {"found", "install", "skip"},
+                {"found", "skip"},
             )
 
 
