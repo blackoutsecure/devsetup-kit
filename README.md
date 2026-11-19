@@ -468,9 +468,10 @@ These are the supported knobs for routine use. They are safe to edit in a fork o
 | `user.vscode.copilot.autoAcceptDelay`       | `1`                                                                                                                                                                                  | Automatically Keep pending Copilot edits after this many seconds (`0` disables; supported range `0`-`100`). Does not grant tool approvals.                                        |
 | `user.vscode.settings`                      | curated set, see below                                                                                                                                                               | Settings merged verbatim into `settings.json`. Wins over everything else.                                                                                                         |
 | `user.vscode.extensions.manage`             | `true`                                                                                                                                                                               | Install/report extensions at all.                                                                                                                                                 |
-| `user.vscode.extensions.install`            | 22 extensions                                                                                                                                                                        | Installed if missing, via the VS Code CLI.                                                                                                                                        |
+| `user.vscode.extensions.install`            | 22 extensions                                                                                                                                                                        | Installed or channel-aligned, via the VS Code CLI.                                                                                                                                 |
 | `user.vscode.extensions.block`              | 11 extensions                                                                                                                                                                        | Never installed. Reported as `[warn]` if already present.                                                                                                                         |
 | `user.vscode.extensions.uninstallBlocked`   | `true`                                                                                                                                                                               | Remove blocked extensions that are installed instead of just reporting them.                                                                                                      |
+| `user.vscode.extensions.preReleaseProfiles` | `["insiders"]`                                                                                                                                                                       | Profiles that receive the Marketplace pre-release channel; all other profiles receive stable releases.                                                                            |
 | `user.mcp.manage`                           | `true`                                                                                                                                                                               | Reconcile MCP servers at all.                                                                                                                                                     |
 | `user.mcp.servers`                          | 4 servers                                                                                                                                                                            | Added to `mcp.json` if absent. Existing entries are never overwritten.                                                                                                            |
 | `user.mcp.inputs`                           | `[]`                                                                                                                                                                                 | `${input:id}` definitions. Required by any server that references one.                                                                                                            |
@@ -796,8 +797,12 @@ Linux the kit also checks `advanced.vscode.extensionCliFallbackPaths` when the C
 
 The baseline explicitly enables `extensions.autoCheckUpdates` and `extensions.autoUpdate`.
 Override either key under `user.vscode.settings` when a project needs a different policy.
-The setup applier installs missing recommendations and validates their presence; it does
-not force-reinstall every existing extension on every run.
+The setup applier uses the matching CLI to install or update every managed recommendation
+on each run: stable profiles receive the Marketplace stable release, while profiles listed
+in `user.vscode.extensions.preReleaseProfiles` receive the pre-release version via
+`<publisher>.<extension>@prerelease`. This also moves already-installed recommendations
+onto the configured channel. Set that list to `[]` to use stable releases in every profile.
+Extensions not in the recommendation list are preserved.
 
 To update extensions already installed in each local VS Code edition, use:
 
@@ -807,11 +812,11 @@ code-insiders --update-extensions
 ```
 
 Use the same commands from Bash on macOS/Linux. Each CLI selects updates compatible with
-its VS Code version and existing release-channel policy; setup does not opt extensions
-into prerelease channels. These commands preserve unrelated installed extensions and do
-not restart VS Code. An updated extension may need a manual window reload before the
-running extension host uses its new version. Check `--list-extensions --show-versions`
-afterward rather than interpreting an unchanged version as a failed upgrade.
+its VS Code version and existing release-channel policy. These commands preserve unrelated
+installed extensions and do not restart VS Code. An updated extension may need a manual
+window reload before the running extension host uses its new version. Check
+`--list-extensions --show-versions` afterward rather than interpreting an unchanged version
+as a failed upgrade.
 
 ### MCP servers
 

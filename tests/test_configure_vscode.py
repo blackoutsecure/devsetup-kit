@@ -316,6 +316,7 @@ class DefaultSettingsTests(unittest.TestCase):
     def test_extension_defaults_are_unique_and_do_not_install_blocked_tools(self):
         policy = self.config["user"]["vscode"]["extensions"]
         blocked = {extension.lower() for extension in policy["block"]}
+        self.assertEqual(policy["preReleaseProfiles"], ["insiders"])
         for target, extensions in (
             ("host", policy["install"]),
             ("container", self.config["user"]["devcontainers"]["extensions"]),
@@ -541,8 +542,46 @@ class ExtensionManagementTests(unittest.TestCase):
             details = [call.args[2] for call in report.call_args_list]
             for extension in self.additions:
                 self.assertIn(f"would install {extension} (test)", details)
+            stable_checks = [
+                detail for detail in details if detail.startswith("would ensure stable channel")
+            ]
+            self.assertEqual(len(stable_checks), len(self.wanted - self.additions))
             self.assertIn(f"would uninstall blocked {self.blocked} (test)", details)
         self.assertEqual(self.installed, before)
+
+    def test_apply_selects_stable_and_prerelease_channels_per_profile(self):
+        config = {
+            "user": {
+                "vscode": {
+                    "extensions": {
+                        "install": ["example.extension", "missing.extension"],
+                        "block": [],
+                        "preReleaseProfiles": ["insiders"],
+                    }
+                }
+            }
+        }
+        targets = [
+            ("stable", "code", "stable-code"),
+            ("insiders", "code-insiders", "insiders-code"),
+        ]
+        with (
+            patch("configure_vscode.code_cli_targets", return_value=targets),
+            patch("configure_vscode.installed_extensions", return_value={"example.extension"}),
+            patch("configure_vscode.run_cli", return_value=(0, "")) as run,
+            patch("configure_vscode.status"),
+        ):
+            configure_vscode.manage_extensions(config, dry_run=False)
+
+        self.assertEqual(
+            [call.args[:3] for call in run.call_args_list],
+            [
+                ("stable-code", "--install-extension", "example.extension"),
+                ("stable-code", "--install-extension", "missing.extension"),
+                ("insiders-code", "--install-extension", "example.extension@prerelease"),
+                ("insiders-code", "--install-extension", "missing.extension@prerelease"),
+            ],
+        )
 
     def test_apply_preserves_optional_tools_and_second_run_makes_no_changes(self):
         def run_cli(cli, operation, extension, *args, **kwargs):
@@ -593,7 +632,7 @@ class ExtensionManagementTests(unittest.TestCase):
             self.assertEqual(snapshot(), before)
 
             self.assertEqual(configure_vscode.main(), 0)
-            self.assertEqual(run.call_count, len(self.additions) + 1)
+            self.assertEqual(run.call_count, len(self.wanted) + 1)
             self.assertEqual(self.installed, self.wanted | {self.optional})
             saved = configure_vscode.load_json(settings_path)
             self.assertEqual(saved["editor.fontSize"], custom_settings["editor.fontSize"])
@@ -603,10 +642,11 @@ class ExtensionManagementTests(unittest.TestCase):
             run.reset_mock()
             report.reset_mock()
             self.assertEqual(configure_vscode.main(), 0)
-            run.assert_not_called()
+            self.assertEqual(run.call_count, len(self.wanted))
             self.assertEqual(snapshot(), before)
             self.assertEqual(
-                {call.args[0] for call in report.call_args_list}, {"found", "skip"}
+                {call.args[0] for call in report.call_args_list},
+                {"found", "install", "skip"},
             )
 
 
