@@ -441,6 +441,9 @@ def manage_extensions(config: dict, dry_run: bool) -> None:
     wanted = [e.lower() for e in get(config, "user.vscode.extensions.install", [])]
     blocked = [e.lower() for e in get(config, "user.vscode.extensions.block", [])]
     uninstall_blocked = get(config, "user.vscode.extensions.uninstallBlocked", False)
+    pre_release_profiles = get(
+        config, "user.vscode.extensions.preReleaseProfiles", ["insiders"]
+    )
 
     assert_no_overlap(wanted, blocked, "extensions", "user.vscode.extensions.install")
     if not wanted and not blocked:
@@ -454,18 +457,26 @@ def manage_extensions(config: dict, dry_run: bool) -> None:
             continue
         missing, present_blocked = extension_plan(config, installed)
 
-        if not missing:
-            status("found", "ext", f"all {len(wanted)} recommended present ({profile})")
-        for ext in missing:
+        for ext in wanted:
+            pre_release = profile in pre_release_profiles
+            install_id = f"{ext}@prerelease" if pre_release else ext
+            channel = "pre-release" if pre_release else "stable"
             if dry_run:
-                status("install", "ext", f"would install {ext} ({profile})")
+                if ext in missing:
+                    detail = f"would install {install_id} ({profile})"
+                else:
+                    detail = f"would ensure {channel} channel for {ext} ({profile})"
+                status("install", "ext", detail)
                 continue
-            status("install", "ext", f"installing {ext} ({profile}); deadline 600s")
+            action = "installing" if ext in missing else f"ensuring {channel} channel for"
+            status("install", "ext", f"{action} {ext} ({profile}); deadline 600s")
             code, output = run_cli(
-                cli, "--install-extension", ext, "--force", timeout=600, capture_output=False
+                cli, "--install-extension", install_id, "--force",
+                timeout=600, capture_output=False
             )
             if code == 0:
-                status("install", "ext", f"installed {ext} ({profile})")
+                state = "install" if ext in missing else "found"
+                status(state, "ext", f"{channel} channel selected for {ext} ({profile})")
             else:
                 status("warn", "ext", f"failed to install {ext}: {output.strip()[:120]}")
 

@@ -96,7 +96,8 @@
                     "ms-vscode.node-debug2",
                     "ms-vscode.powershell-preview",
                     "ms-vscode.vscode-typescript-tslint-plugin"
-                ]
+                ],
+                "preReleaseProfiles": ["insiders"]
             },
             "settings": {
                 "agents.voice.enabled": false,
